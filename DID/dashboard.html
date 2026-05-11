@@ -1,0 +1,1604 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SDN Zero Trust · Dashboard</title>
+<script src="/vis-network.min.js"></script>
+<style>
+:root {
+  --bg:      #07090f;
+  --panel:   #0d1117;
+  --panel2:  #111827;
+  --border:  #1c2d45;
+  --auth:    #00e676;
+  --pending: #ffd600;
+  --offline: #ff4444;
+  --text:    #d4d8e0;
+  --muted:   #4b5563;
+  --accent:  #00b4d8;
+  --purple:  #a78bfa;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Consolas', 'Courier New', monospace;
+  height: 100vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  font-size: 13px;
+}
+
+/* ── HEADER ───────────────────────────────────────────── */
+header {
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  padding: 9px 18px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-shrink: 0;
+  height: 46px;
+}
+
+header h1 {
+  font-size: 13px;
+  color: var(--accent);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+
+.pulse-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--auth);
+  animation: pulse 2s infinite;
+  flex-shrink: 0;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 4px currentColor; }
+  50%       { opacity: 0.4; box-shadow: none; }
+}
+
+.header-stats {
+  display: flex;
+  gap: 24px;
+  margin-left: auto;
+  align-items: center;
+}
+
+.stat { display: flex; align-items: center; gap: 7px; font-size: 11px; color: var(--muted); }
+.stat-val { font-weight: bold; font-size: 17px; }
+.stat-auth    .stat-val { color: var(--auth); }
+.stat-pending .stat-val { color: var(--pending); }
+.stat-offline .stat-val { color: var(--offline); }
+
+.clock { color: var(--muted); font-size: 11px; padding-left: 14px; border-left: 1px solid var(--border); }
+
+.btn-reauth-all {
+  padding: 5px 13px;
+  border: 1px solid #1d4ed8;
+  border-radius: 4px;
+  background: #0a1e3b;
+  color: #60a5fa;
+  font-size: 11px;
+  font-family: inherit;
+  cursor: pointer;
+  font-weight: bold;
+  letter-spacing: 0.3px;
+  transition: opacity .15s;
+}
+.btn-reauth-all:hover:not(:disabled) { opacity: .8; }
+.btn-reauth-all:disabled { opacity: .3; cursor: default; }
+
+.btn-demo {
+  padding: 5px 13px;
+  border: 1px solid #166534;
+  border-radius: 4px;
+  background: #0a2515;
+  color: #4ade80;
+  font-size: 11px;
+  font-family: inherit;
+  cursor: pointer;
+  font-weight: bold;
+  letter-spacing: 0.3px;
+  transition: opacity .15s, background .2s, border-color .2s;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.btn-demo:hover { opacity: .85; }
+.btn-demo.active {
+  background: #2a1000;
+  border-color: #7c2d12;
+  color: #fb923c;
+}
+.demo-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+  animation: demo-pulse 1s ease-in-out infinite;
+}
+@keyframes demo-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: .15; }
+}
+.demo-scenario {
+  font-size: 9px;
+  color: var(--muted);
+  max-width: 130px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  align-self: center;
+}
+.btn-reauth { background: #0a1e3b; color: #60a5fa; border: 1px solid #1d4ed8; }
+
+/* ── PING ─────────────────────────────────────────────── */
+#ping-block {
+  border-top: 1px solid var(--border);
+  padding: 9px 14px 11px;
+  flex-shrink: 0;
+}
+
+.ping-title {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+
+.ping-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 7px;
+}
+
+.ping-lbl { font-size: 10px; color: var(--muted); flex-shrink: 0; }
+.ping-node { font-size: 11px; font-weight: bold; color: var(--purple); flex-shrink: 0; }
+
+.ping-select {
+  flex: 1;
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: 11px;
+  font-family: inherit;
+  padding: 3px 6px;
+  border-radius: 3px;
+  min-width: 0;
+}
+
+.btn-ping {
+  padding: 5px 12px;
+  background: #0a2515;
+  border: 1px solid #166534;
+  color: #4ade80;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  font-family: inherit;
+  font-weight: bold;
+  flex-shrink: 0;
+  transition: opacity .15s;
+}
+.btn-ping:hover:not(:disabled) { opacity: .8; }
+.btn-ping:disabled { opacity: .3; cursor: default; }
+.btn-ping.running { background: #2a1000; border-color: #7c2d12; color: #f97316; }
+.btn-stop { background: #1a0505; border-color: #7f1d1d; color: #f87171; }
+
+.ping-terminal {
+  background: #020b14;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 6px 9px;
+  font-size: 11px;
+  line-height: 1.75;
+  max-height: 135px;
+  overflow-y: auto;
+  display: none;
+}
+.ping-terminal.visible { display: block; }
+.ping-terminal::-webkit-scrollbar { width: 3px; }
+.ping-terminal::-webkit-scrollbar-thumb { background: var(--border); }
+.p-ok   { color: #00e676; }
+.p-warn { color: #ffd600; }
+.p-fail { color: #ff4444; }
+.p-stat { color: #a78bfa; }
+.p-info { color: var(--muted); }
+
+/* ── MAIN LAYOUT ──────────────────────────────────────── */
+main {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* ── GRAPH PANEL ──────────────────────────────────────── */
+#graph-panel {
+  flex: 1;
+  position: relative;
+  border-right: 1px solid var(--border);
+  background: radial-gradient(ellipse at 50% 50%, #0a1020 0%, var(--bg) 70%);
+}
+
+#network { width: 100%; height: 100%; }
+
+.graph-badge {
+  position: absolute;
+  top: 11px; left: 15px;
+  font-size: 10px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  pointer-events: none;
+}
+
+/* ── INFO PANEL ───────────────────────────────────────── */
+#info-panel {
+  width: 330px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: var(--panel);
+}
+
+/* ── DETAIL BLOCK ─────────────────────────────────────── */
+#detail-block {
+  border-bottom: 1px solid var(--border);
+  padding: 12px 14px;
+  flex-shrink: 0;
+}
+
+.block-title {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: var(--muted);
+  margin-bottom: 9px;
+}
+
+#detail-content { font-size: 12px; line-height: 1.9; }
+.dl { display: flex; gap: 6px; }
+.dl .lbl { color: var(--muted); flex-shrink: 0; }
+.val-auth    { color: var(--auth);    font-weight: bold; }
+.val-pending { color: var(--pending); font-weight: bold; }
+.val-offline { color: var(--offline); font-weight: bold; }
+.val-did     { color: #fbbf24; font-size: 10px; word-break: break-all; }
+
+.action-btns { display: flex; gap: 8px; margin-top: 10px; }
+.btn {
+  flex: 1;
+  padding: 7px 4px;
+  border: none;
+  border-radius: 5px;
+  font-size: 11px;
+  font-family: inherit;
+  cursor: pointer;
+  font-weight: bold;
+  letter-spacing: 0.3px;
+  transition: opacity .15s, transform .1s;
+}
+.btn:hover:not(:disabled) { opacity: .85; transform: translateY(-1px); }
+.btn:disabled { opacity: .25; cursor: default; }
+.btn-quar    { background: #3b0a0a; color: #fca5a5; border: 1px solid #7f1d1d; }
+.btn-restore { background: #052e16; color: #86efac; border: 1px solid #14532d; }
+
+/* ── SWITCH LIST ──────────────────────────────────────── */
+#list-block {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  border-bottom: 1px solid var(--border);
+}
+
+.block-title-bar {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: var(--muted);
+  padding: 9px 14px 7px;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+#switch-list-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 5px 6px;
+}
+#switch-list-scroll::-webkit-scrollbar { width: 3px; }
+#switch-list-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+.sw-row {
+  display: flex;
+  align-items: center;
+  padding: 6px 8px;
+  border-radius: 5px;
+  cursor: pointer;
+  gap: 9px;
+  transition: background .12s;
+  margin-bottom: 1px;
+  border: 1px solid transparent;
+}
+.sw-row:hover { background: rgba(0,180,216,.07); }
+.sw-row.selected { background: rgba(0,180,216,.12); border-color: rgba(0,180,216,.3); }
+
+.sw-id {
+  font-size: 11px;
+  font-weight: bold;
+  color: var(--purple);
+  width: 26px;
+  flex-shrink: 0;
+}
+
+.sw-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.d-auth    { background: var(--auth);    box-shadow: 0 0 5px var(--auth); }
+.d-pending { background: var(--pending); }
+.d-off     { background: #2d2d2d; }
+
+.sw-meta { flex: 1; min-width: 0; }
+.sw-state { font-size: 11px; }
+.sw-did   { font-size: 10px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px; }
+
+.sw-token { font-size: 11px; text-align: right; flex-shrink: 0; width: 52px; }
+.tk-ok   { color: var(--auth); }
+.tk-warn { color: var(--pending); }
+.tk-crit { color: var(--offline); }
+.tk-none { color: #2d2d2d; }
+
+/* ── EVENTS ───────────────────────────────────────────── */
+#events-block {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--border);
+  transition: height .2s ease;
+}
+
+.events-title {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: var(--muted);
+  padding: 8px 14px 7px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  user-select: none;
+}
+.events-title:hover { color: var(--text); }
+
+.events-chevron {
+  font-size: 10px;
+  transition: transform .2s ease;
+  color: var(--muted);
+}
+#events-block.open .events-chevron { transform: rotate(180deg); }
+
+#events-body {
+  overflow: hidden;
+  max-height: 0;
+  transition: max-height .25s ease;
+}
+#events-block.open #events-body { max-height: 160px; }
+
+#events-list {
+  height: 126px;
+  overflow-y: auto;
+  padding: 3px 10px;
+}
+#events-list::-webkit-scrollbar { width: 3px; }
+#events-list::-webkit-scrollbar-thumb { background: var(--border); }
+
+.ev {
+  padding: 3px 0;
+  border-bottom: 1px solid rgba(255,255,255,.03);
+  display: flex;
+  gap: 7px;
+  align-items: baseline;
+  font-size: 11px;
+}
+.ev-time { color: var(--muted); flex-shrink: 0; font-size: 10px; }
+.ev-icon { flex-shrink: 0; }
+.ev-auth     { color: var(--auth); }
+.ev-quar     { color: var(--offline); }
+.ev-restore  { color: #60a5fa; }
+.ev-expire   { color: var(--pending); }
+.ev-inactive { color: #9ca3af; }
+
+/* ── TABS ─────────────────────────────────────────────── */
+.tab-bar {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.tab-btn {
+  flex: 1;
+  padding: 8px 4px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--muted);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  font-family: inherit;
+  transition: color .15s, border-color .15s;
+}
+.tab-btn:hover { color: var(--text); }
+.tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+.tab-badge {
+  display: inline-block;
+  background: rgba(0,180,216,.25);
+  color: var(--accent);
+  border-radius: 8px;
+  padding: 0 5px;
+  font-size: 9px;
+  font-weight: bold;
+  margin-left: 4px;
+  min-width: 16px;
+  text-align: center;
+  vertical-align: middle;
+}
+.tab-badge.badge-new {
+  background: var(--offline);
+  color: #fff;
+  animation: badge-pop .25s ease;
+}
+@keyframes badge-pop {
+  0%   { transform: scale(1.6); }
+  100% { transform: scale(1); }
+}
+
+/* ── FLUX LIST ────────────────────────────────────────── */
+#flux-list-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 5px 6px;
+  display: none;
+}
+#flux-list-scroll::-webkit-scrollbar { width: 3px; }
+#flux-list-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+.flux-src { color: var(--auth); font-weight: bold; }
+.flux-sep { color: var(--muted); }
+.flux-dst { color: #60a5fa; font-weight: bold; }
+
+.flux-route-block {
+  padding: 9px 11px 10px;
+  margin-bottom: 7px;
+  background: rgba(0,180,216,.04);
+  border: 1px solid rgba(0,180,216,.13);
+  border-radius: 7px;
+  animation: flux-in .3s ease;
+}
+@keyframes flux-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.flux-route-header {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 8px;
+}
+.flux-dir-label {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--muted);
+  flex-shrink: 0;
+  width: 48px;
+}
+.flux-ips-label { flex: 1; font-size: 11px; }
+.flux-hops-badge {
+  font-size: 9px;
+  background: rgba(0,180,216,.18);
+  color: var(--accent);
+  border-radius: 8px;
+  padding: 2px 7px;
+  font-weight: bold;
+  flex-shrink: 0;
+}
+
+.flux-path {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.flux-path-node {
+  background: rgba(139,92,246,.13);
+  border: 1px solid rgba(139,92,246,.32);
+  color: var(--purple);
+  border-radius: 4px;
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: bold;
+}
+.flux-path-arrow { color: var(--muted); font-size: 9px; }
+
+.flux-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 130px;
+  color: var(--muted);
+  font-size: 11px;
+  gap: 9px;
+  text-align: center;
+}
+.flux-empty-icon { font-size: 28px; opacity: .25; }
+
+/* ── TOAST ────────────────────────────────────────────── */
+#toast {
+  position: fixed;
+  bottom: 18px; right: 18px;
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 9px 16px;
+  border-radius: 6px;
+  font-size: 12px;
+  opacity: 0;
+  transition: opacity .3s;
+  pointer-events: none;
+  z-index: 100;
+}
+#toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="pulse-dot" id="status-dot"></div>
+  <h1>SDN Zero Trust &nbsp;·&nbsp; Dashboard</h1>
+  <div class="header-stats">
+    <div class="stat stat-auth">
+      <span>Authentifiés</span>
+      <span class="stat-val" id="stat-auth">—</span>
+    </div>
+    <div class="stat stat-pending">
+      <span>En attente</span>
+      <span class="stat-val" id="stat-pending">—</span>
+    </div>
+    <div class="stat stat-offline">
+      <span>Hors ligne</span>
+      <span class="stat-val" id="stat-offline">—</span>
+    </div>
+    <button class="btn-reauth-all" id="btn-reauth-all" onclick="doReauthAll()">🔐 Re-auth tout</button>
+    <button class="btn-demo" id="btn-demo" onclick="toggleDemo()">▶ Mode Démo</button>
+    <span class="demo-scenario" id="demo-scenario" style="display:none"></span>
+    <div class="clock" id="clock"></div>
+  </div>
+</header>
+
+<main>
+  <div id="graph-panel">
+    <div class="graph-badge">Topologie réseau</div>
+    <div id="network"></div>
+  </div>
+
+  <div id="info-panel">
+
+    <!-- Détail switch sélectionné -->
+    <div id="detail-block">
+      <div class="block-title">Switch sélectionné</div>
+      <div id="detail-content" style="color:var(--muted)">
+        Cliquez sur un switch dans le graphe ou la liste.
+      </div>
+      <div id="ping-block" style="display:none">
+        <div class="ping-title">Ping</div>
+        <div class="ping-row">
+          <span class="ping-lbl">De</span>
+          <span id="ping-src" class="ping-node">—</span>
+          <span class="ping-lbl">vers</span>
+          <select id="ping-dst" class="ping-select"></select>
+          <button id="ping-btn"  class="btn-ping" onclick="launchPing()">▶ Ping</button>
+          <button id="ping-stop" class="btn-ping btn-stop" onclick="stopPing()" disabled>■ Stop</button>
+        </div>
+        <div id="ping-terminal" class="ping-terminal"></div>
+      </div>
+    </div>
+
+    <!-- Liste switches / Flux — onglets -->
+    <div id="list-block">
+      <div class="tab-bar">
+        <button class="tab-btn active" id="tab-switches" onclick="switchTab('switches')">
+          Switches <span class="tab-badge" id="badge-switches">22</span>
+        </button>
+        <button class="tab-btn" id="tab-flux" onclick="switchTab('flux')">
+          Flux réseau <span class="tab-badge" id="badge-flux">0</span>
+        </button>
+      </div>
+      <div id="switch-list-scroll">
+        <div id="switch-list"></div>
+      </div>
+      <div id="flux-list-scroll">
+        <div id="flux-list"></div>
+      </div>
+    </div>
+
+    <!-- Journal -->
+    <div id="events-block">
+      <div class="events-title" onclick="toggleEvents()">
+        <span>Journal d'événements <span id="events-badge" style="color:var(--accent)"></span></span>
+        <span class="events-chevron">▲</span>
+      </div>
+      <div id="events-body">
+        <div id="events-list"></div>
+      </div>
+    </div>
+
+  </div>
+</main>
+
+<div id="toast"></div>
+
+<script>
+// ================================================================
+// Global state
+// ================================================================
+let status = {};
+let prevStatus = {};
+let selectedId = null;
+let network = null;
+let nodesDS = null;
+let edgesDS = null;
+let edgesBuilt = false;
+const eventLog = [];
+
+// Flux
+let activeTab = 'switches';
+let newFluxCount = 0;
+let lastFlowSeq = 0;
+let currentPingFlows = [];
+let pingFlowsFrozen  = false;  // true once the path is captured for the current ping
+const flashTimers = {};
+const routeTimers = {};
+
+// ================================================================
+// Utilities
+// ================================================================
+const $ = id => document.getElementById(id);
+const nowSec = () => Date.now() / 1000;
+
+function fmtDur(s) {
+  s = Math.max(0, Math.floor(s));
+  return `${Math.floor(s / 60)}m${String(s % 60).padStart(2, '0')}s`;
+}
+
+function tokenClass(rem) {
+  if (rem <= 0)  return 'tk-crit';
+  if (rem < 30)  return 'tk-crit';
+  if (rem < 60)  return 'tk-warn';
+  return 'tk-ok';
+}
+
+function stateHTML(state) {
+  if (state === 'auth')      return '<span class="val-auth">AUTH OK</span>';
+  if (state === 'connected') return '<span class="val-pending">EN ATTENTE</span>';
+  return '<span class="val-offline">HORS LIGNE</span>';
+}
+
+function toast(msg) {
+  const el = $('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 2800);
+}
+
+// ================================================================
+// Tabs
+// ================================================================
+
+function switchTab(tab) {
+  activeTab = tab;
+  $('tab-switches').classList.toggle('active', tab === 'switches');
+  $('tab-flux').classList.toggle('active', tab === 'flux');
+  $('switch-list-scroll').style.display = tab === 'switches' ? 'block' : 'none';
+  $('flux-list-scroll').style.display   = tab === 'flux'     ? 'block' : 'none';
+  if (tab === 'flux') {
+    newFluxCount = 0;
+    updateFluxBadge();
+  }
+}
+
+function updateFluxBadge() {
+  const badge = $('badge-flux');
+  const total = (status._flows || []).length;
+  badge.textContent = newFluxCount > 0 ? `+${newFluxCount}` : total;
+  badge.className = 'tab-badge' + (newFluxCount > 0 ? ' badge-new' : '');
+}
+
+// ================================================================
+// Flash node (when a flow traverses it)
+// ================================================================
+function flashNode(dpid, duration = 900) {
+  if (flashTimers[dpid]) clearTimeout(flashTimers[dpid]);
+  nodesDS.update({
+    id: dpid,
+    color: { background:'#001e3c', border:'#00b4d8', highlight:{ background:'#002952', border:'#33ccff' } },
+    shadow: { enabled:true, color:'rgba(0,180,216,.6)', size:18, x:0, y:0 },
+  });
+  flashTimers[dpid] = setTimeout(() => {
+    const info  = status[String(dpid)] || { state:'unknown' };
+    const state = info.state || 'unknown';
+    nodesDS.update({
+      id: dpid,
+      color: nodeColor(state),
+      shadow: state === 'auth'
+        ? { enabled:true, color:'rgba(0,230,118,.25)', size:12, x:0, y:0 }
+        : false,
+    });
+    delete flashTimers[dpid];
+  }, duration);
+}
+
+// ================================================================
+// BFS on authenticated switches (same logic as Ryu Dijkstra)
+// ================================================================
+function bfsPath(srcDpid, dstDpid) {
+  // Subgraph: only authenticated switches
+  const auth = new Set();
+  for (let i = 1; i <= 22; i++) {
+    if ((status[String(i)] || {}).state === 'auth') auth.add(i);
+  }
+  if (!auth.has(srcDpid) || !auth.has(dstDpid)) return [];
+
+  // Adjacency list from edgesDS (undirected)
+  const adj = new Map();
+  edgesDS.get().forEach(e => {
+    if (!adj.has(e.from)) adj.set(e.from, []);
+    if (!adj.has(e.to))   adj.set(e.to,   []);
+    adj.get(e.from).push(e.to);
+    adj.get(e.to).push(e.from);
+  });
+
+  // BFS
+  const visited = new Set([srcDpid]);
+  const queue   = [[srcDpid, [srcDpid]]];
+  while (queue.length) {
+    const [node, path] = queue.shift();
+    if (node === dstDpid) return path;
+    for (const nb of (adj.get(node) || [])) {
+      if (!visited.has(nb) && auth.has(nb)) {
+        visited.add(nb);
+        queue.push([nb, [...path, nb]]);
+      }
+    }
+  }
+  return [];
+}
+
+// ================================================================
+// Full route highlight (BFS + edges + nodes)
+// ================================================================
+function highlightRoute(srcIp, dstIp) {
+  // In this topology hX is connected to sX → 10.0.0.X gives dpid X
+  const srcDpid = parseInt(srcIp.split('.')[3]);
+  const dstDpid = parseInt(dstIp.split('.')[3]);
+
+  const path = bfsPath(srcDpid, dstDpid);
+  if (path.length < 2) return;
+
+  const routeKey = path.join('-');
+  if (routeTimers[routeKey]) clearTimeout(routeTimers[routeKey]);
+
+  // Flash de tous les nœuds du chemin
+  path.forEach(d => flashNode(d, 2500));
+
+  // Find consecutive edges along the path
+  const routeEdges = [];
+  for (let i = 0; i < path.length - 1; i++) {
+    const a = path[i], b = path[i + 1];
+    const edge = edgesDS.get().find(e =>
+      (e.from === a && e.to === b) || (e.from === b && e.to === a)
+    );
+    if (edge) routeEdges.push(edge);
+  }
+  if (!routeEdges.length) return;
+
+  // Illuminer en cyan vif
+  edgesDS.update(routeEdges.map(e => ({ id: e.id, color: '#00b4d8', width: 4 })));
+  network.redraw();
+
+  // Restore after 2.5 seconds
+  routeTimers[routeKey] = setTimeout(() => {
+    edgesDS.update(routeEdges.map(e => ({ id: e.id, color: '#1c2d45', width: 1.5 })));
+    network.redraw();
+    delete routeTimers[routeKey];
+  }, 2500);
+}
+
+// ================================================================
+// Flow rendering — horizontal path view per route
+// ================================================================
+function renderFluxList() {
+  if (!currentPingFlows.length) {
+    $('flux-list').innerHTML = `
+      <div class="flux-empty">
+        <div class="flux-empty-icon">⟶</div>
+        <div>Lancez un ping pour visualiser les routes</div>
+      </div>`;
+    return;
+  }
+
+  // Group by direction src→dst
+  const groups = new Map();
+  currentPingFlows.forEach(f => {
+    const key = `${f.src}→${f.dst}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(f);
+  });
+
+  // Detect forward/return pairs
+  const keys = [...groups.keys()];
+
+  let html = '';
+  groups.forEach((flows, route) => {
+    const [srcIP, dstIP] = route.split('→');
+    const reverseKey = `${dstIP}→${srcIP}`;
+    const hasPair = groups.has(reverseKey);
+
+    let dirLabel = '';
+    if (hasPair) {
+      const srcNum = parseInt(srcIP.split('.')[3]);
+      const dstNum = parseInt(dstIP.split('.')[3]);
+      dirLabel = srcNum < dstNum ? '→ Aller' : '← Retour';
+    }
+
+    const hops = flows.length;
+
+    html += `<div class="flux-route-block">`;
+
+    // Header: direction + IPs + hops badge
+    html += `<div class="flux-route-header">`;
+    if (dirLabel) {
+      html += `<span class="flux-dir-label">${dirLabel}</span>`;
+    }
+    html += `<span class="flux-ips-label">
+      <span class="flux-src">${srcIP}</span>
+      <span class="flux-sep"> ──▶ </span>
+      <span class="flux-dst">${dstIP}</span>
+    </span>`;
+    html += `<span class="flux-hops-badge">${hops} hop${hops > 1 ? 's' : ''}</span>`;
+    html += `</div>`;
+
+    // Chemin horizontal
+    html += `<div class="flux-path">`;
+    flows.forEach((f, idx) => {
+      html += `<span class="flux-path-node">s${f.dpid}</span>`;
+      if (idx < flows.length - 1) {
+        html += `<span class="flux-path-arrow">▶</span>`;
+      }
+    });
+    html += `</div>`;
+
+    html += `</div>`;
+  });
+
+  $('flux-list').innerHTML = html;
+}
+
+// ================================================================
+// Event log — toggle
+// ================================================================
+let eventsOpen = false;
+let unreadEvents = 0;
+
+function toggleEvents() {
+  eventsOpen = !eventsOpen;
+  const block = $('events-block');
+  block.classList.toggle('open', eventsOpen);
+  if (eventsOpen) {
+    unreadEvents = 0;
+    $('events-badge').textContent = '';
+  }
+}
+
+function addEvent(type, text) {
+  const t = new Date().toLocaleTimeString('fr-FR', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
+  const icons = { auth:'✅', quar:'🔴', restore:'🔵', expire:'⏰', inactive:'💤' };
+  eventLog.unshift({ time: t, icon: icons[type] || '·', text, type });
+  if (eventLog.length > 60) eventLog.pop();
+  if (!eventsOpen) {
+    unreadEvents++;
+    $('events-badge').textContent = `· ${unreadEvents}`;
+  }
+  renderEvents();
+}
+
+function renderEvents() {
+  $('events-list').innerHTML = eventLog.slice(0, 25).map(e =>
+    `<div class="ev">
+      <span class="ev-time">${e.time}</span>
+      <span class="ev-icon">${e.icon}</span>
+      <span class="ev-${e.type}">${e.text}</span>
+    </div>`
+  ).join('');
+}
+
+// ================================================================
+// vis-network — static positions (S1 at center)
+// ================================================================
+
+// Fixed positions mirroring the topo_projet.py topology
+const NODE_POSITIONS = {
+  1:  { x:    0, y:    0 },  // Center — main hub
+
+  // Branche haut
+  5:  { x:    0, y: -210 },
+  4:  { x: -110, y: -260 },
+  2:  { x: -220, y: -175 },
+  3:  { x: -345, y: -235 },
+
+  // Branche haut-droite
+  6:  { x:  135, y: -205 },
+  7:  { x:  270, y: -100 },
+  8:  { x:  385, y: -170 },
+
+  // Branche droite
+  9:  { x:  265, y:   80 },
+  10: { x:  385, y:   80 },
+
+  // Branche bas-droite
+  11: { x:  125, y:  225 },
+  12: { x:  245, y:  295 },
+  13: { x:  145, y:  345 },
+  14: { x:   15, y:  315 },
+  15: { x:   15, y:  425 },
+  16: { x:   15, y:  535 },
+
+  // Branche bas-gauche
+  17: { x: -130, y:  225 },
+  18: { x: -250, y:  295 },
+  19: { x: -245, y:  155 },
+
+  // Branche gauche
+  20: { x: -275, y:   40 },
+
+  // Far-Top-Left branch
+  21: { x: -195, y:  -90 },
+  22: { x: -315, y: -155 },
+};
+
+function initNetwork() {
+  nodesDS = new vis.DataSet();
+  edgesDS = new vis.DataSet();
+
+  for (let i = 1; i <= 22; i++) {
+    const pos = NODE_POSITIONS[i] || { x: 0, y: 0 };
+    nodesDS.add({
+      id: i,
+      label: `s${i}`,
+      x: pos.x,
+      y: pos.y,
+      color: nodeColor('unknown'),
+      font: { color: '#8a9bb0', size: 11, face: 'Consolas, Monaco, monospace' },
+      size: i === 1 ? 22 : 16,   // S1 slightly larger
+      borderWidth: i === 1 ? 3 : 2,
+      shadow: false,
+    });
+  }
+
+  network = new vis.Network(
+    $('network'),
+    { nodes: nodesDS, edges: edgesDS },
+    {
+      physics: { enabled: false },  // Positions frozen after layout
+      edges: {
+        color: { color: '#1c2d45', highlight: '#00b4d8', opacity: 0.8 },
+        width: 1.5,
+        smooth: { enabled: false },
+        hoverWidth: 3,
+      },
+      nodes: { shape: 'dot' },
+      interaction: { hover: true, tooltipDelay: 150, dragNodes: true },
+    }
+  );
+
+  network.on('click', params => {
+    if (params.nodes.length) selectSwitch(params.nodes[0]);
+    else deselectSwitch();
+  });
+}
+
+function nodeColor(state) {
+  if (state === 'auth')
+    return { background:'#011c0a', border:'#00e676', highlight:{ background:'#022b10', border:'#33ff8e' } };
+  if (state === 'connected')
+    return { background:'#1a1500', border:'#ffd600', highlight:{ background:'#261f00', border:'#ffe033' } };
+  return { background:'#0d1117', border:'#1c2d45', highlight:{ background:'#111827', border:'#374151' } };
+}
+
+// ================================================================
+// Graph update
+// ================================================================
+function updateNetwork(newStatus) {
+  const t = nowSec();
+  const updates = [];
+
+  for (let i = 1; i <= 22; i++) {
+    const info  = newStatus[String(i)] || { state: 'unknown' };
+    const state = info.state || 'unknown';
+    const color = nodeColor(state);
+
+    let title = `<b style="color:#a78bfa">s${i}</b>&nbsp; ${state.toUpperCase()}`;
+    if (state === 'auth') {
+      const rem  = (info.expiry || 0) - t;
+      const idle = Math.floor(t - (info.last_seen || t));
+      title += `<br>Token : ${fmtDur(rem)}<br>Idle : ${idle}s`;
+      if (info.did) title += `<br><span style="color:#fbbf24;font-size:10px">${info.did}</span>`;
+    }
+
+    updates.push({
+      id: i,
+      color,
+      title,
+      font: { color: state === 'auth' ? '#e0e0e0' : '#4b5563' },
+      size: state === 'auth' ? 20 : 14,
+      shadow: state === 'auth'
+        ? { enabled: true, color: 'rgba(0,230,118,.25)', size: 12, x: 0, y: 0 }
+        : false,
+      borderWidth: state === 'auth' ? 2.5 : 1.5,
+    });
+  }
+  nodesDS.update(updates);
+
+  // Build edges only once
+  if (!edgesBuilt && newStatus._edges && newStatus._edges.length > 0) {
+    const seen = new Set();
+    const toAdd = [];
+    for (const [src, dst] of newStatus._edges) {
+      const key = `${Math.min(src, dst)}-${Math.max(src, dst)}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        toAdd.push({ from: src, to: dst });
+      }
+    }
+    edgesDS.add(toAdd);
+    edgesBuilt = true;
+  }
+}
+
+// ================================================================
+// Header stats
+// ================================================================
+function updateStats(newStatus) {
+  let nAuth = 0, nPend = 0, nOff = 0;
+  for (let i = 1; i <= 22; i++) {
+    const s = (newStatus[String(i)] || {}).state || 'unknown';
+    if (s === 'auth')      nAuth++;
+    else if (s === 'connected') nPend++;
+    else nOff++;
+  }
+  $('stat-auth').textContent    = nAuth;
+  $('stat-pending').textContent = nPend;
+  $('stat-offline').textContent = nOff;
+
+  const dot = $('status-dot');
+  dot.style.background = nAuth > 0 ? 'var(--auth)' : 'var(--offline)';
+  dot.style.color      = nAuth > 0 ? 'var(--auth)' : 'var(--offline)';
+}
+
+// ================================================================
+// State change detection
+// ================================================================
+function detectChanges(newStatus) {
+  for (let i = 1; i <= 22; i++) {
+    const k    = String(i);
+    const cur  = (newStatus[k]  || { state: 'unknown' }).state;
+    const prev = (prevStatus[k] || { state: 'unknown' }).state;
+    if (cur === prev) continue;
+
+    if (cur === 'auth') {
+      const did = (newStatus[k].did || '').split(':').slice(2).join(':');
+      addEvent('auth', `s${i} authentifié — ${did}`);
+    } else if (prev === 'auth' && cur === 'connected') {
+      addEvent('expire', `s${i} token expiré / mis en quarantaine`);
+    } else if (prev === 'auth' && cur === 'unknown') {
+      addEvent('inactive', `s${i} perdu (inactivité ou déconnexion)`);
+    }
+  }
+}
+
+// ================================================================
+// Switch list
+// ================================================================
+function renderSwitchList() {
+  const t = nowSec();
+  let html = '';
+
+  for (let i = 1; i <= 22; i++) {
+    const info  = status[String(i)] || { state: 'unknown' };
+    const state = info.state || 'unknown';
+    const sel   = selectedId === i;
+
+    let dotCls  = 'd-off';
+    let stateTxt = 'Hors ligne';
+    let tokenHtml = '<span class="tk-none">———</span>';
+    let didTxt  = '';
+
+    if (state === 'auth') {
+      dotCls   = 'd-auth';
+      stateTxt = 'Auth OK';
+      const rem = (info.expiry || 0) - t;
+      tokenHtml = `<span class="${tokenClass(rem)}">${fmtDur(rem)}</span>`;
+      if (info.did) {
+        const parts = info.did.split(':');
+        didTxt = parts.slice(2).join(':');
+      }
+    } else if (state === 'connected') {
+      dotCls   = 'd-pending';
+      stateTxt = 'En attente';
+    }
+
+    html += `
+      <div class="sw-row${sel ? ' selected' : ''}" onclick="selectSwitch(${i})">
+        <span class="sw-id">s${i}</span>
+        <div class="sw-dot ${dotCls}"></div>
+        <div class="sw-meta">
+          <div class="sw-state">${stateTxt}</div>
+          ${didTxt ? `<div class="sw-did">${didTxt}</div>` : ''}
+        </div>
+        <div class="sw-token">${tokenHtml}</div>
+      </div>`;
+  }
+
+  $('switch-list').innerHTML = html;
+}
+
+// ================================================================
+// Switch detail
+// ================================================================
+function selectSwitch(id) {
+  selectedId = id;
+  network.selectNodes([id]);
+  renderSwitchList();
+  renderDetail();
+  updatePingBlock(id);
+  // Cancel any running ping when switching selection
+  if (pingES) { pingES.close(); pingES = null; }
+  _resetPingButtons();
+}
+
+function deselectSwitch() {
+  selectedId = null;
+  renderSwitchList();
+  $('detail-content').innerHTML = '<span style="color:var(--muted)">Cliquez sur un switch dans le graphe ou la liste.</span>';
+  updatePingBlock(null);
+}
+
+function renderDetail() {
+  if (!selectedId) return;
+  const id   = selectedId;
+  const info = status[String(id)] || { state: 'unknown' };
+  const state = info.state || 'unknown';
+  const t = nowSec();
+
+  let html = `
+    <div class="dl"><span class="lbl">Switch :</span> <b style="color:var(--purple)">s${id}</b></div>
+    <div class="dl"><span class="lbl">État :</span> ${stateHTML(state)}</div>`;
+
+  if (state === 'auth') {
+    const rem     = Math.max(0, (info.expiry || 0) - t);
+    const idle    = Math.floor(t - (info.last_seen || t));
+    const expTime = info.expiry
+      ? new Date(info.expiry * 1000).toLocaleTimeString('fr-FR')
+      : '—';
+    html += `
+    <div class="dl"><span class="lbl">Token :</span> <span class="${tokenClass(rem)}">${fmtDur(rem)}</span> (expire ${expTime})</div>
+    <div class="dl"><span class="lbl">Idle :</span> ${idle}s</div>`;
+    if (info.did)
+      html += `<div class="dl"><span class="lbl">DID :</span></div><div class="val-did">${info.did}</div>`;
+  } else if (state === 'connected') {
+    html += `<div style="color:var(--muted);font-size:11px;margin-top:5px">Connecté au contrôleur, authentification DID en attente.</div>`;
+  } else {
+    html += `<div style="color:var(--muted);font-size:11px;margin-top:5px">Switch non connecté au contrôleur.</div>`;
+  }
+
+  const canQuar    = state === 'auth';
+  const canRestore = state !== 'auth';
+  const canReauth  = state === 'auth' || state === 'connected';
+
+  html += `
+    <div class="action-btns">
+      <button class="btn btn-quar"    onclick="doQuarantine(${id})" ${canQuar    ? '' : 'disabled'}>🔴 Quarantaine</button>
+      <button class="btn btn-restore" onclick="doRestore(${id})"    ${canRestore ? '' : 'disabled'}>🟢 Restaurer</button>
+      <button class="btn btn-reauth"  onclick="doReauth(${id})"     ${canReauth  ? '' : 'disabled'}>🔐 Re-auth</button>
+    </div>`;
+
+  $('detail-content').innerHTML = html;
+}
+
+// ================================================================
+// Quarantine / restore actions
+// ================================================================
+async function doQuarantine(id) {
+  try {
+    const r = await fetch(`/quarantine/${id}`, { method: 'POST' });
+    const d = await r.json();
+    if (d.ok) {
+      addEvent('quar', `s${id} mis en quarantaine via dashboard`);
+      toast(`s${id} mis en quarantaine`);
+    } else {
+      toast(`Erreur : ${d.msg || 'commande échouée'}`);
+    }
+  } catch (e) {
+    toast('Connexion au serveur perdue');
+  }
+}
+
+// ================================================================
+// Ping
+// ================================================================
+
+let pingES = null;
+
+function updatePingBlock(id) {
+  const block = $('ping-block');
+  if (!id) { block.style.display = 'none'; return; }
+  block.style.display = 'block';
+  $('ping-src').textContent = `s${id}`;
+
+  const sel  = $('ping-dst');
+  const prev = parseInt(sel.value) || 0;
+  sel.innerHTML = '';
+  for (let i = 1; i <= 22; i++) {
+    if (i === id) continue;
+    const opt = document.createElement('option');
+    opt.value = i;
+    opt.textContent = `s${i}  (10.0.0.${i})`;
+    if (i === prev) opt.selected = true;
+    sel.appendChild(opt);
+  }
+}
+
+function colorPingLine(line) {
+  const e = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const l = e(line);
+  if (!line || line.startsWith('PING '))
+    return `<span class="p-info">${l}</span>`;
+  if (line.includes('bytes from') && line.includes('time=')) {
+    const m = line.match(/time=([\d.]+)/);
+    const rtt = m ? parseFloat(m[1]) : 0;
+    const cls = rtt > 50 ? 'p-warn' : 'p-ok';
+    const hi  = l.replace(/time=[\d.]+ ms/, t => `<b>${t}</b>`);
+    return `<span class="${cls}">${hi}</span>`;
+  }
+  if (line.includes('timeout') || line.includes('nreachable'))
+    return `<span class="p-fail">${l}</span>`;
+  if (line.includes('100% packet loss'))
+    return `<span class="p-fail">${l}</span>`;
+  if (line.includes('packet loss') || line.startsWith('rtt '))
+    return `<span class="p-stat">${l}</span>`;
+  if (line.includes('statistics'))
+    return `<span class="p-info">${l}</span>`;
+  return `<span class="p-info">${l}</span>`;
+}
+
+function _resetPingButtons() {
+  const btn  = $('ping-btn');
+  const stop = $('ping-stop');
+  if (btn)  { btn.disabled = false; btn.classList.remove('running'); btn.textContent = '▶ Ping'; }
+  if (stop) { stop.disabled = true; }
+}
+
+function stopPing() {
+  if (pingES) { pingES.close(); pingES = null; }
+  _resetPingButtons();
+  const term = $('ping-terminal');
+  if (term) {
+    const row = document.createElement('div');
+    row.innerHTML = '<span class="p-info">— ping arrêté —</span>';
+    term.appendChild(row);
+    term.scrollTop = term.scrollHeight;
+  }
+  // Clear the frozen path
+  currentPingFlows = [];
+  pingFlowsFrozen  = false;
+  renderFluxList();
+}
+
+function launchPing() {
+  if (!selectedId) return;
+  const src = selectedId;
+  const dst = parseInt($('ping-dst').value);
+  if (!dst) return;
+
+  if (pingES) { pingES.close(); pingES = null; }
+
+  // Reset the frozen path from the previous ping
+  currentPingFlows = [];
+  pingFlowsFrozen  = false;
+  renderFluxList();
+
+  const btn  = $('ping-btn');
+  const stop = $('ping-stop');
+  const term = $('ping-terminal');
+
+  // Zero Trust check: src and dst must both be authenticated
+  const srcState = (status[String(src)] || {}).state || 'unknown';
+  const dstState = (status[String(dst)] || {}).state || 'unknown';
+  if (srcState !== 'auth' || dstState !== 'auth') {
+    term.innerHTML = '';
+    term.classList.add('visible');
+    const row = document.createElement('div');
+    let reason = '';
+    if (srcState !== 'auth' && dstState !== 'auth') {
+      reason = `s${src} et s${dst} ne sont pas authentifiés`;
+    } else if (srcState !== 'auth') {
+      const label = srcState === 'connected' ? 'en attente d\'authentification' : 'hors ligne / en quarantaine';
+      reason = `s${src} est ${label}`;
+    } else {
+      const label = dstState === 'connected' ? 'en attente d\'authentification' : 'hors ligne / en quarantaine';
+      reason = `s${dst} est ${label}`;
+    }
+    row.innerHTML = `<span class="p-fail">⛔ Communication impossible — ${reason}</span>`;
+    term.appendChild(row);
+    return;
+  }
+
+  btn.disabled = true;
+  btn.classList.add('running');
+  btn.textContent = '⏳';
+  stop.disabled = false;
+  term.innerHTML = '';
+  term.classList.add('visible');
+
+  const header = document.createElement('div');
+  header.innerHTML = `<span class="p-info">▶ ping s${src} → s${dst} (10.0.0.${dst}) continu</span>`;
+  term.appendChild(header);
+
+  pingES = new EventSource(`/ping?src=${src}&dst=${dst}`);
+
+  pingES.onmessage = e => {
+    try {
+      const d = JSON.parse(e.data);
+      if (d.done) {
+        pingES.close(); pingES = null;
+        _resetPingButtons();
+        return;
+      }
+      const row = document.createElement('div');
+      row.innerHTML = colorPingLine(d.line);
+      term.appendChild(row);
+      term.scrollTop = term.scrollHeight;
+    } catch (_) {}
+  };
+
+  pingES.onerror = () => {
+    if (pingES) { pingES.close(); pingES = null; }
+    _resetPingButtons();
+    const row = document.createElement('div');
+    row.innerHTML = '<span class="p-fail">Connexion perdue.</span>';
+    term.appendChild(row);
+  };
+}
+
+async function doReauth(id) {
+  try {
+    const r = await fetch(`/reauth/${id}`, { method: 'POST' });
+    const d = await r.json();
+    if (d.ok) {
+      addEvent('auth', `s${id} re-authentification lancée`);
+      toast(`s${id} — re-auth envoyée`);
+    } else {
+      toast(`Erreur : ${d.msg || 'commande échouée'}`);
+    }
+  } catch (e) {
+    toast('Connexion au serveur perdue');
+  }
+}
+
+async function doReauthAll() {
+  const btn = $('btn-reauth-all');
+  btn.disabled = true;
+  btn.textContent = '⏳ En cours…';
+  try {
+    const r = await fetch('/reauth', { method: 'POST' });
+    const d = await r.json();
+    if (d.ok) {
+      addEvent('auth', 'Re-authentification globale lancée (22 switches)');
+      toast('Re-auth globale lancée — ~11 secondes');
+    } else {
+      toast(`Erreur : ${d.msg || 'commande échouée'}`);
+    }
+  } catch (e) {
+    toast('Connexion au serveur perdue');
+  }
+  // Re-enable button after estimated duration (22 × 0.3s + margin)
+  setTimeout(() => {
+    btn.disabled = false;
+    btn.textContent = '🔐 Re-auth tout';
+  }, 12000);
+}
+
+async function doRestore(id) {
+  try {
+    const r = await fetch(`/restore/${id}`, { method: 'POST' });
+    const d = await r.json();
+    if (d.ok) {
+      addEvent('restore', `s${id} restauré via dashboard`);
+      toast(`s${id} restauré — relancez l'auth DID`);
+    } else {
+      toast(`Erreur : ${d.msg || 'commande échouée'}`);
+    }
+  } catch (e) {
+    toast('Connexion au serveur perdue');
+  }
+}
+
+// ================================================================
+// Full update from SSE data
+// ================================================================
+function applyStatus(newStatus) {
+  detectChanges(newStatus);
+
+  // Detect new flows via the monotonic counter _flow_seq
+  const nextSeq   = newStatus._flow_seq || 0;
+  const added     = nextSeq - lastFlowSeq;
+  if (added > 0) {
+    const nextFlows = newStatus._flows || [];
+    const newOnes   = nextFlows.slice(-Math.min(added, nextFlows.length));
+
+    if (!pingFlowsFrozen) {
+      // Capturer le chemin une fois puis geler l'affichage
+      currentPingFlows = newOnes;
+      if (pingES) pingFlowsFrozen = true;  // active ping → freeze after this capture
+    }
+
+    // Highlight the full route for each unique IP pair
+    const ipPairs = new Set(newOnes.map(f => `${f.src}→${f.dst}`));
+    ipPairs.forEach(pair => {
+      const [src, dst] = pair.split('→');
+      highlightRoute(src, dst);
+    });
+
+    if (activeTab !== 'flux') newFluxCount += added;
+  }
+  lastFlowSeq = nextSeq;
+
+  prevStatus = JSON.parse(JSON.stringify(status));
+  status = newStatus;
+
+  updateStats(status);
+  updateNetwork(status);
+  renderSwitchList();
+  renderFluxList();
+  updateFluxBadge();
+  if (selectedId) renderDetail();
+}
+
+// ================================================================
+// Demo Mode
+// ================================================================
+let demoActive = false;
+
+function _applyDemoState(active, label) {
+  demoActive = active;
+  const btn = $('btn-demo');
+  const sc  = $('demo-scenario');
+  if (active) {
+    btn.classList.add('active');
+    btn.innerHTML = '<span class="demo-dot"></span> Démo active';
+    sc.style.display = 'inline';
+    sc.textContent   = label || '';
+  } else {
+    btn.classList.remove('active');
+    btn.innerHTML    = '▶ Mode Démo';
+    sc.style.display = 'none';
+    sc.textContent   = '';
+  }
+}
+
+async function toggleDemo() {
+  const endpoint = demoActive ? '/demo/stop' : '/demo/start';
+  try {
+    const r = await fetch(endpoint, { method: 'POST' });
+    const d = await r.json();
+    if (d.ok) {
+      _applyDemoState(!demoActive, '');
+      if (demoActive) switchTab('flux');  // switch to flux tab when demo starts
+    }
+  } catch (_) {
+    toast('Connexion au serveur perdue');
+  }
+}
+
+// Poll the current scenario every 2s while demo mode is active
+setInterval(async () => {
+  if (!demoActive) return;
+  try {
+    const r = await fetch('/demo');
+    const d = await r.json();
+    if (d.active) {
+      $('demo-scenario').textContent = d.label || '';
+    } else {
+      _applyDemoState(false, '');
+    }
+  } catch (_) {}
+}, 2000);
+
+// ================================================================
+// Clock
+// ================================================================
+function updateClock() {
+  $('clock').textContent = new Date().toLocaleString('fr-FR', {
+    dateStyle: 'short', timeStyle: 'medium'
+  });
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// Update token countdown and flow ages every second
+setInterval(() => {
+  if (Object.keys(status).length) {
+    renderSwitchList();
+    renderFluxList();
+    if (selectedId) renderDetail();
+  }
+}, 1000);
+
+// ================================================================
+// SSE connection
+// ================================================================
+function connectSSE() {
+  const es = new EventSource('/stream');
+
+  es.onmessage = e => {
+    try { applyStatus(JSON.parse(e.data)); }
+    catch (_) {}
+  };
+
+  es.onerror = () => {
+    $('status-dot').style.background = 'var(--offline)';
+    es.close();
+    setTimeout(connectSSE, 3000);
+  };
+}
+
+// ================================================================
+// Initialization
+// ================================================================
+initNetwork();
+
+// Load initial status immediately
+fetch('/status')
+  .then(r => r.json())
+  .then(applyStatus)
+  .catch(() => {});
+
+// Stop any running demo on the server side when the page loads
+fetch('/demo/stop', { method: 'POST' }).catch(() => {});
+
+connectSSE();
+</script>
+</body>
+</html>

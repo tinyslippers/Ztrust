@@ -1,0 +1,907 @@
+================================================================================
+   DOCUMENTATION COMPLÈTE — PROJET SDN ZERO TRUST AVEC IDENTITÉS DID/BLOCKCHAIN
+================================================================================
+Date de rédaction : 13 mars 2026 — Mis à jour : 23 mars 2026
+Auteur du projet  : Utilisateur (IA assistante : Claude Code)
+
+Ce document décrit INTÉGRALEMENT le projet : architecture, fichiers, flux
+de données, mécanismes de sécurité, et comportements en toutes situations.
+Il peut être fourni tel quel à n'importe quel assistant IA pour reprendre
+le projet sans contexte préalable.
+
+================================================================================
+1. RÉSUMÉ EN UNE PHRASE
+================================================================================
+
+Un réseau SDN (Software-Defined Networking) simulé sous Mininet avec 22
+switches OVS, contrôlé par Ryu (OpenFlow 1.3), où AUCUN switch ne peut
+faire transiter du trafic tant qu'il n'a pas prouvé son identité via un
+mécanisme DID (Decentralized Identifier) + signature ECDSA, la clé publique
+de référence étant stockée dans une blockchain locale (fichier ledger.json).
+
+================================================================================
+2. PHILOSOPHIE ZERO TRUST
+================================================================================
+
+"Ne jamais faire confiance, toujours vérifier."
+
+Dans ce projet, chaque switch OVS est traité comme non-fiable par défaut :
+  - À la connexion, la règle "table-miss" envoie TOUT au contrôleur.
+  - Seuls les paquets UDP sur le port 9999 (paquets d'authentification DID)
+    sont traités. TOUT autre trafic est silencieusement droppé.
+  - Après authentification réussie, le switch est placé en "whitelist" et
+    des règles OpenFlow de routage lui sont installées.
+  - Un token d'authentification expire après 30 minutes (1800 secondes).
+  - Une re-auth proactive est déclenchée automatiquement quand il reste < 5 min.
+  - Un switch inactif (aucun paquet depuis 5 minutes) est mis en quarantaine.
+  - Si un switch tombe ou expire, toutes les routes le traversant sont
+    recalculées automatiquement via l'algorithme de Dijkstra.
+
+================================================================================
+3. ARCHITECTURE GLOBALE
+================================================================================
+
+                    ┌─────────────────────────────────────┐
+                    │         CONTRÔLEUR RYU               │
+                    │         did_controller.py            │
+                    │                                      │
+                    │  ┌──────────┐  ┌──────────────────┐ │
+                    │  │Blockchain│  │ Graphe NetworkX   │ │
+                    │  │ledger.json│  │ (22 noeuds/liens) │ │
+                    │  └──────────┘  └──────────────────┘ │
+                    │  ┌─────────────────────────────────┐ │
+                    │  │ authenticated_dpid (whitelist)  │ │
+                    │  │ auth_expiry (timestamps tokens) │ │
+                    │  │ last_seen (anti-inactivité)     │ │
+                    │  └─────────────────────────────────┘ │
+                    └──────────────────┬──────────────────┘
+                                       │ OpenFlow 1.3
+                                       │ TCP 6633
+                    ┌──────────────────▼──────────────────┐
+                    │         MININET (simulation)         │
+                    │    topo_projet.py                    │
+                    │                                      │
+                    │  22 switches OVS (s1 ... s22)        │
+                    │  22 hôtes Linux   (h1 ... h22)       │
+                    │  Topologie maillée complexe           │
+                    └─────────────────────────────────────┘
+
+Fichiers du projet :
+  /home/debian/Bureau/DID/
+    ├── did_controller.py       ← Contrôleur Ryu principal (Zero Trust)
+    ├── blockchain.py           ← Registre DID (blockchain locale)
+    ├── agent_auth.py           ← Agent d'authentification (côté switch/hôte)
+    ├── auth_monitor.py         ← Dashboard terminal (xterm) temps réel
+    ├── dashboard.html          ← Dashboard web graphique (vis-network)
+    ├── dashboard_server.py     ← Serveur HTTP du dashboard web (port 8181)
+    ├── vis-network.min.js      ← Bibliothèque de visualisation de graphe (locale)
+    ├── ledger.json             ← Fichier de la blockchain (généré automatiquement)
+    └── keystore/
+        └── secrets.json        ← Clés privées + DID de chaque switch
+
+  /home/debian/Bureau/topologies/
+    ├── topo_projet.py          ← Topologie Mininet principale (22 switches)
+    └── monitor.py              ← Watchdog OVS (connexion contrôleur)
+
+  /tmp/sdn_auth_status.json     ← Fichier de statut partagé (contrôleur → dashboard)
+
+================================================================================
+4. TOPOLOGIE RÉSEAU (topo_projet.py)
+================================================================================
+
+4.1. SWITCHES
+-------------
+22 switches OVS (Open vSwitch), nommés s1 à s22.
+Chaque switch est configuré avec :
+  - protocols='OpenFlow13'  → OpenFlow version 1.3
+  - failMode='secure'       → En cas de perte du contrôleur, DROP tout
+  - STP désactivé           → Le contrôleur Ryu gère la topologie via Dijkstra
+
+4.2. HÔTES
+----------
+22 hôtes Linux simulés (h1 à h22), chacun connecté à son switch correspondant :
+  - h1 connecté à s1, h2 à s2, ..., h22 à s22
+  - Adresses IP fixes      : 10.0.0.1 à 10.0.0.22
+  - Adresses MAC fixes     : 00:00:00:00:00:01 à 00:00:00:00:00:16
+
+4.3. LIENS INTER-SWITCHES (câblage manuel — topologie maillée)
+--------------------------------------------------------------
+Les liens définissent une topologie mesh complexe avec des boucles et
+des chemins redondants :
+
+  Branche Haut-Gauche      : s1-s2, s2-s3, s2-s4, s4-s5, s1-s5
+  Ajouts CSV (Option B)    : s1-s4, s1-s6, s2-s21, s11-s17
+  Branche Haut-Droite      : s5-s6, s6-s7, s1-s7, s7-s8
+  Branche Droite           : s7-s9, s9-s10, s1-s9
+  Branche Bas-Droite       : s9-s11, s11-s12, s11-s13, s1-s11
+  Branche Bas Extrême      : s11-s14, s14-s15, s15-s16
+  Branche Bas-Gauche       : s1-s17, s17-s18, s17-s19
+  Branche Gauche           : s19-s20, s20-s1
+  Branche Haut-Gauche Ext  : s20-s21, s21-s22, s21-s1
+
+Remarque : s1 est le hub central avec des connexions directes vers de
+nombreux switches, ce qui en fait le nœud le plus critique de la topologie.
+
+4.4. TABLES ARP STATIQUES
+--------------------------
+Au démarrage, le script injecte 22×22 entrées ARP statiques dans chaque
+hôte (soit 462 entrées au total, puisque i≠j). Cela évite le flood ARP
+broadcast qui provoquerait des boucles réseau en l'absence de STP.
+
+  Commande exécutée pour chaque paire (h_i, h_j) :
+    arp -s 10.0.0.j  00:00:00:00:00:xx
+
+4.5. SÉQUENCE DE DÉMARRAGE
+---------------------------
+  1. Nettoyage Mininet (mn -c)
+  2. Création des switches et hôtes
+  3. net.start() → connexion des switches au contrôleur Ryu via TCP 6633
+  4. Attente 8 secondes (découverte LLDP par Ryu)
+  5. Sauvegarde des PIDs hôtes dans /tmp/mn_host_pids.json
+  6. Injection des tables ARP statiques (22×22)
+  7. Authentification DID séquentielle : h1 auth pour switch_1, h2 pour switch_2,
+     ..., h22 pour switch_22 (délai 0.5s entre chaque pour éviter la surcharge Ryu)
+  8. Lancement des 22 agents watchdog en background (re-auth autonome toutes les 25 min)
+  9. Lancement du watchdog OVS dans un xterm séparé
+  10. Ouverture du CLI Mininet (avec commande "reauth" personnalisée)
+
+================================================================================
+5. BLOCKCHAIN & IDENTITÉS DID (blockchain.py + secrets.json)
+================================================================================
+
+5.1. FORMAT DES DID
+--------------------
+Les DID suivent le format standard W3C adapté au contexte SDN :
+  did:sdn:switch_X:XXXXXXXX
+
+Exemples réels :
+  switch_1  → did:sdn:switch_1:c88627d2
+  switch_2  → did:sdn:switch_2:a4a2c370
+  switch_3  → did:sdn:switch_3:c9bcd746
+
+La partie XXXXXXXX est un suffixe hexadécimal unique (fingerprint).
+
+5.2. STRUCTURE DE LA BLOCKCHAIN
+---------------------------------
+La blockchain est une chaîne de blocs liés par hachage SHA-256.
+Chaque bloc contient :
+  {
+    "index"        : numéro séquentiel du bloc,
+    "timestamp"    : heure de création (Unix),
+    "data"         : {"did": "did:sdn:...", "public_key": "hex..."},
+    "previous_hash": hash du bloc précédent,
+    "hash"         : SHA-256 de l'ensemble des champs ci-dessus
+  }
+
+Le premier bloc (genesis) contient :
+  data = "Genesis Block - Debut du registre DePIN"
+
+Chaque switch a un bloc dédié dans la chaîne contenant son DID et sa
+clé publique ECDSA (courbe SECP256k1, format non-compressé, 128 hex chars).
+
+Fichier : /home/debian/Bureau/DID/ledger.json
+Chargé au démarrage du contrôleur via : self.ledger = Blockchain("ledger.json")
+
+5.3. OPÉRATIONS BLOCKCHAIN
+----------------------------
+  - add_identity(did, public_key) : ajoute un nouveau bloc identité
+  - get_public_key(did)           : cherche en sens inverse (dernier bloc gagne)
+                                    pour permettre la mise à jour de clés
+  - save_chain() / load_chain()   : persistence JSON sur disque
+
+5.4. KEYSTORE (secrets.json)
+-----------------------------
+Fichier JSON local (côté agents/hôtes) contenant les clés PRIVÉES.
+Structure pour chaque switch :
+  {
+    "switch_1": {
+      "name"       : "switch_1",
+      "did"        : "did:sdn:switch_1:c88627d2",
+      "private_key": "c9103dc6fb77a0b30318818546...",  (64 hex chars, 32 bytes)
+      "public_key" : "c1fd0f8681a3600dbd57c357..."     (128 hex chars, 64 bytes)
+    },
+    ...
+  }
+
+ATTENTION : Ce fichier contient les clés privées. Il ne doit jamais être
+partagé ou envoyé sur le réseau. Il reste sur la machine locale.
+
+Algorithme cryptographique : ECDSA sur courbe SECP256k1 (même courbe que Bitcoin)
+Bibliothèque Python        : ecdsa (SigningKey, VerifyingKey)
+
+================================================================================
+6. AGENT D'AUTHENTIFICATION (agent_auth.py)
+================================================================================
+
+6.1. RÔLE
+----------
+Chaque switch doit s'authentifier. Comme les switches OVS n'ont pas de CPU
+applicatif, c'est l'hôte connecté au switch (h_i pour s_i) qui joue le rôle
+d'agent d'authentification.
+
+6.2. PROCESSUS D'AUTHENTIFICATION (côté agent)
+------------------------------------------------
+  Étape 1 — Chargement de l'identité
+    Lecture de secrets.json pour récupérer le DID et la clé privée du switch.
+
+  Étape 2 — Création du message signé (anti-rejeu)
+    message = "AuthRequest:did:sdn:switch_X:XXXXXXXX:TIMESTAMP_UNIX"
+    Le timestamp change à chaque auth → impossible de rejouer un ancien token.
+
+  Étape 3 — Signature ECDSA
+    sk = SigningKey.from_string(unhexlify(private_key), curve=SECP256k1)
+    signature = sk.sign(message.encode('utf-8'))
+    signature_hex = hexlify(signature).decode()
+
+  Étape 4 — Construction du payload JSON
+    {
+      "did"       : "did:sdn:switch_1:c88627d2",
+      "message"   : "AuthRequest:did:sdn:switch_1:c88627d2:1741700000",
+      "signature" : "3045...",
+      "timestamp" : "1741700000"
+    }
+
+  Étape 5 — Envoi UDP (3 fois pour compenser les pertes UDP)
+    Destination : 10.255.255.255 port 9999 (broadcast)
+    Le paquet traverse le switch associé à l'hôte → PacketIn au contrôleur.
+
+6.3. POURQUOI UN BROADCAST ?
+-----------------------------
+L'adresse 10.255.255.255 est "injoignable" normalement, mais cela force
+le switch (qui n'a pas encore de règles de routage) à remonter le paquet
+au contrôleur via PacketIn. Le contrôleur intercepte tout le trafic d'un
+switch non-authentifié et filtre sur UDP:9999.
+
+6.4. MODE WATCHDOG (autonome)
+------------------------------
+  L'agent peut fonctionner en mode watchdog : boucle infinie qui re-signe
+  automatiquement toutes les 25 minutes (WATCHDOG_INTERVAL = 1500s), indépendamment
+  du contrôleur. Constitue un second filet de sécurité en plus de la re-auth
+  proactive du contrôleur.
+
+  Lancement watchdog (géré automatiquement par topo_projet.py) :
+    python3 /home/debian/Bureau/DID/agent_auth.py switch_1 --watchdog
+
+  En mode watchdog, les prints sont redirigés vers /dev/null (silencieux).
+  Le processus tourne en background (&) dans le namespace réseau de h{i}.
+
+6.5. COMMANDE MANUELLE (one-shot)
+-----------------------------------
+  python3 /home/debian/Bureau/DID/agent_auth.py switch_1
+
+6.6. RE-AUTHENTIFICATION VIA CLI MININET
+------------------------------------------
+Commande disponible dans le CLI Mininet :
+  mininet> reauth
+Cette commande ré-authentifie séquentiellement les 22 switches (délai 0.3s).
+
+================================================================================
+7. CONTRÔLEUR RYU — DID CONTROLLER (did_controller.py)
+================================================================================
+
+7.1. CONSTANTES CLÉS
+---------------------
+  ROUTING_COOKIE     = 0xDEAD1  → Cookie OpenFlow pour identifier les règles de routage
+  AUTH_PORT          = 9999     → Port UDP des paquets d'authentification
+  STATUS_FILE        = '/tmp/sdn_auth_status.json'  → Fichier de statut partagé
+  PIDS_FILE          = '/tmp/mn_host_pids.json'     → PIDs hôtes Mininet (nsenter)
+  AGENT_PATH         = '/home/debian/Bureau/DID/agent_auth.py'
+  AUTH_LIFETIME      = 1800     → Durée de vie d'un token (30 minutes)
+  INACTIVITY_TIMEOUT = 300      → Quarantaine si inactif depuis 5 minutes
+  CHECK_INTERVAL     = 15       → Vérification d'expiration toutes les 15 secondes
+  REAUTH_THRESHOLD   = 300      → Déclenche re-auth proactive si token < 5 min restants
+
+7.2. STRUCTURES DE DONNÉES INTERNES
+-------------------------------------
+  self.authenticated_dpid  : set() de DPID (int) des switches authentifiés
+  self.dpid_to_did         : dict {dpid: did_string}
+  self.auth_expiry         : dict {dpid: timestamp_expiration}
+  self.last_seen           : dict {dpid: timestamp_dernier_paquet}
+  self.reauth_pending      : set() de DPID dont la re-auth proactive est en cours
+                             (évite de déclencher plusieurs re-auths simultanées)
+  self.net                 : nx.DiGraph() — graphe topologique (noeuds=DPID, arêtes=liens)
+  self.hosts               : dict {mac: (dpid, port)} — localisation des hôtes
+  self.datapaths           : dict {dpid: datapath_object}
+  self.recent_flows        : list (60 derniers flux IP tracés)
+  self.ledger              : instance Blockchain
+
+7.3. CYCLE DE VIE D'UN SWITCH
+-------------------------------
+
+  [ CONNEXION ]
+    → EventOFPSwitchFeatures → switch_features_handler()
+      - Enregistre le datapath dans self.datapaths
+      - Installe la règle table-miss (priorité 0) : tout → PacketIn contrôleur
+
+  [ DÉCOUVERTE LLDP ]
+    → EventSwitchEnter → switch_enter_handler()
+      - Ajoute le DPID comme nœud dans self.net (graphe NetworkX)
+    → EventLinkAdd → link_add_handler()
+      - Ajoute l'arête dans self.net avec le port de sortie
+      - Déclenche _recalculate_all_paths()
+
+  [ AUTHENTIFICATION ]
+    → Paquet UDP:9999 reçu → _packet_in_handler() → _handle_auth_packet()
+      - Extraction du JSON du payload
+      - Vérification signature ECDSA (via blockchain)
+      - Vérification anti-spoofing (DPID physique = ID dans le DID)
+      - Si OK : ajout dans authenticated_dpid, mise à jour auth_expiry et last_seen
+      - Déclenchement de _recalculate_all_paths()
+
+  [ TRAFIC NORMAL ]
+    → PacketIn d'un switch authentifié → _packet_in_handler()
+      - Mise à jour last_seen
+      - Apprentissage de la localisation de l'hôte source (MAC → dpid, port)
+      - Si hôte destination connu : calcul du chemin Dijkstra → PacketOut
+      - Si hôte destination inconnu : DROP (pas de flood)
+      - Installation des règles de routage bidirectionnelles (idle_timeout=10s)
+
+  [ RE-AUTH PROACTIVE ]
+    → Thread _expiry_monitor() vérifie toutes les 15s
+      - Si remaining < REAUTH_THRESHOLD (300s) ET dpid pas dans reauth_pending :
+          → reauth_pending.add(dpid)
+          → hub.spawn(_trigger_reauth, dpid)
+      → _trigger_reauth(dpid) :
+          - Ouvre /tmp/mn_host_pids.json → récupère PID de h{dpid}
+          - Lance : nsenter -n -t <pid> -- python3 agent_auth.py switch_{dpid}
+          - Si échec : retire dpid de reauth_pending (permettra retry au prochain cycle)
+      → À la réception du paquet auth : reauth_pending.discard(dpid)
+
+  [ EXPIRATION TOKEN ]
+    → Thread _expiry_monitor() vérifie toutes les 15s
+      - Token expiré (remaining <= 0) → quarantaine
+      - Inactif depuis 300s (last_seen[dpid] + 300 < now) → quarantaine
+      → _quarantine_expired() :
+          - Retire le DPID de authenticated_dpid
+          - Purge les règles de routage (ROUTING_COOKIE)
+          - Recalcule les routes sans ce switch
+
+  [ PERTE DE SWITCH ]
+    → EventSwitchLeave → switch_leave_handler()
+      - Retire le nœud du graphe NetworkX
+      - Retire le switch de authenticated_dpid, datapaths, hosts
+      - Purge les règles de routage
+      - Recalcule les routes
+
+7.4. VÉRIFICATION DE SIGNATURE ECDSA
+--------------------------------------
+  Fonction : verify_signature(did, message, signature_hex)
+
+  1. Interroge la blockchain : pub_key_hex = self.ledger.get_public_key(did)
+  2. Reconstruit la clé publique : VerifyingKey.from_string(unhexlify(pub_key_hex), SECP256k1)
+  3. Vérifie : vk.verify(unhexlify(signature_hex), message.encode('utf-8'))
+  4. Retourne True si valide, False si BadSignatureError ou DID inconnu
+
+7.5. VÉRIFICATION ANTI-SPOOFING
+---------------------------------
+  Après validation cryptographique, le contrôleur vérifie que le DPID du
+  switch émetteur (physique, issu de la connexion OpenFlow) correspond au
+  numéro de switch dans le DID :
+
+    did = "did:sdn:switch_5:e0d5e0be"
+    claimed_id = int(did.split(':')[2].split('_')[1])  → 5
+    si dpid != claimed_id → SPOOFING DÉTECTÉ → rejet
+
+  Cela empêche qu'un switch malveillant s'authentifie avec le DID d'un autre.
+
+7.6. CALCUL DE ROUTES (DIJKSTRA)
+----------------------------------
+  Fonction : _get_path(src_dpid, dst_dpid)
+
+  Le calcul se fait sur un SOUS-GRAPHE limité aux switches authentifiés :
+    subgraph = self.net.subgraph(self.authenticated_dpid)
+    path = nx.shortest_path(subgraph, src_dpid, dst_dpid)
+
+  Cela garantit que les routes ne transitent JAMAIS par un switch non-authentifié
+  ou en quarantaine, même s'il est physiquement connecté.
+
+7.7. INSTALLATION DES RÈGLES OPENFLOW
+---------------------------------------
+  Fonction : _install_path(path, dst_mac, dst_port)
+
+  Pour chaque switch du chemin :
+    - match : eth_dst = MAC destination
+    - action : output vers le port menant au prochain hop (ou vers l'hôte final)
+    - priority : 2 (supérieure à la table-miss qui est 0)
+    - cookie : ROUTING_COOKIE (0xDEAD1) pour pouvoir purger uniquement ces règles
+    - idle_timeout : 10 secondes (permet de monitorer l'activité des flux)
+
+  La règle table-miss (cookie=0, priority=0) n'est JAMAIS purgeée.
+
+7.8. PURGE DES RÈGLES DE ROUTAGE
+----------------------------------
+  Fonction : _delete_routing_flows()
+
+  Envoie un OFPFlowMod OFPFC_DELETE sur tous les datapaths connus,
+  avec cookie=ROUTING_COOKIE et cookie_mask=0xFFFFFFFFFFFFFFFF.
+  Seules les règles de routage sont supprimées. La table-miss reste intacte.
+
+7.9. THREAD DE SURVEILLANCE
+-----------------------------
+  Un greenthread Ryu tourne en parallèle (_expiry_monitor) :
+    - Démarre avec un délai initial de 15s
+    - Vérifie toutes les 15s les expirations, inactivités et approches d'expiration
+    - Déclenche les re-auths proactives (remaining < REAUTH_THRESHOLD)
+    - Met à jour le fichier de statut JSON
+
+================================================================================
+8. DASHBOARDS DE MONITORING
+================================================================================
+
+Il existe DEUX interfaces de monitoring distinctes qui fonctionnent en parallèle :
+  1. auth_monitor.py   → Dashboard terminal (xterm), lancé automatiquement par Ryu
+  2. dashboard web     → Interface graphique web (HTML + vis-network.js)
+
+--------------------------------------------------------------------------------
+8.1. DASHBOARD TERMINAL (auth_monitor.py)
+--------------------------------------------------------------------------------
+
+RÔLE :
+  Terminal séparé (xterm) qui s'ouvre automatiquement au démarrage du contrôleur.
+  Affiche en temps réel (actualisation 1s) l'état d'authentification des 22 switches.
+
+SOURCE DE DONNÉES :
+  Lit /tmp/sdn_auth_status.json écrit par le contrôleur toutes les 15s (+ à chaque événement).
+
+INFORMATIONS AFFICHÉES PAR SWITCH :
+  | ID  | ÉTAT      | TOKEN    | IDLE    | DID                      |
+  |-----|-----------|----------|---------|--------------------------|
+  | s1  | OK (vert) | 4m32s    | 2s      | switch_1:c88627d2        |
+  | s2  | ATTENTE   | ---      | ---     | En attente auth...       |
+  | s3  | OFFLINE   | ---      | ---     | Non connecte             |
+
+  États possibles :
+    - OK (vert)      : authentifié, token valide
+    - ATTENTE (jaune): connecté mais authentification DID en attente
+    - OFFLINE (rouge): switch non vu par le contrôleur
+
+  Couleurs du token (temps restant) :
+    - Vert  : > 60s    Jaune : 30–60s    Rouge : < 30s
+
+  Couleurs de l'idle (inactivité) :
+    - Vert  : < 30s    Jaune : 30–60s    Rouge : > 60s
+
+  Résumé global en haut : Auth OK : X   En attente : Y   Hors ligne : Z
+
+LANCEMENT : automatique via _launch_monitor_terminal() dans did_controller.py
+  (ouvre un xterm positionné à droite de l'écran, 74×32 caractères)
+
+--------------------------------------------------------------------------------
+8.2. DASHBOARD WEB GRAPHIQUE (dashboard.html + dashboard_server.py)
+--------------------------------------------------------------------------------
+
+RÔLE :
+  Interface web complète accessible dans un navigateur, avec :
+    - Graphe interactif de la topologie (vis-network.js — bibliothèque locale)
+    - Liste cliquable des 22 switches avec état + countdown token
+    - Onglet "Flux réseau" : affiche les flux IP en cours (pings, etc.)
+    - Journal d'événements temps réel
+    - Boutons de quarantaine/restauration directement dans l'interface
+    - Illumination des routes actives sur le graphe
+
+ACCÈS :
+  http://localhost:8181   (port 8181, pas 8080 malgré le commentaire du fichier)
+
+LANCEMENT (MANUEL — pas lancé automatiquement) :
+  cd ~/Bureau/DID
+  python3 dashboard_server.py
+
+ARCHITECTURE TECHNIQUE :
+
+  dashboard_server.py — Serveur HTTP Python (stdlib uniquement, ThreadingHTTPServer)
+  Endpoints :
+    GET  /                  → Sert dashboard.html
+    GET  /vis-network.min.js → Sert la lib graphe (locale, pas de CDN)
+    GET  /status            → Retourne le JSON de /tmp/sdn_auth_status.json
+    GET  /stream            → Flux SSE (Server-Sent Events) — pousse les mises à jour
+                              en temps réel (polling 1s du fichier status, envoie si changé)
+    GET  /ping?src=X&dst=Y  → Ping continu SSE depuis h{src} vers 10.0.0.{dst}
+                              (sans -c : ping infini, stoppé par déconnexion client)
+    GET  /demo              → JSON {"active": bool, "label": str} — état mode démo
+    POST /quarantine/<id>   → Exécute : ovs-vsctl del-controller s<id>
+    POST /restore/<id>      → Exécute : ovs-vsctl set-controller s<id> tcp:127.0.0.1:6633
+    POST /reauth/<id>       → nsenter vers h<id> + agent_auth.py switch_<id>
+    POST /reauth            → Re-auth globale en thread de fond (0.3s entre chaque)
+    POST /demo/start        → Démarre le mode démo (thread de fond, scénarios cycliques)
+    POST /demo/stop         → Arrête le mode démo
+
+  dashboard.html — Interface monopage (vanilla JS, zéro dépendance externe)
+
+COMPOSANTS DU DASHBOARD WEB :
+
+  [HEADER]
+    - Titre "SDN Zero Trust · Dashboard"
+    - Point clignotant vert/rouge (au moins 1 switch auth = vert)
+    - Compteurs globaux : Authentifiés / En attente / Hors ligne
+    - Bouton "🔐 Re-auth tout" : re-auth globale séquentielle (~11s)
+    - Bouton "▶ Mode Démo" : lance/arrête le mode démo (voir ci-dessous)
+      · Quand actif : bouton orange pulsant + label du scénario courant
+      · Bascule automatiquement sur l'onglet "Flux réseau" au démarrage
+    - Horloge temps réel
+
+  [PANNEAU GAUCHE — Graphe topologique]
+    - Visualisation vis-network.js des 22 nœuds et tous les liens
+    - Physique forceAtlas2Based (stabilisation puis figé)
+    - Couleurs des nœuds :
+        Vert  (#00e676) + halo : switch authentifié
+        Jaune (#ffd600)        : switch connecté, en attente d'auth
+        Gris  (#1c2d45)        : switch inconnu / offline
+    - Taille des nœuds : 20px si auth, 14px sinon
+    - Tooltip au survol : état, temps token restant, idle, DID complet
+    - Clic sur un nœud → affiche le détail dans le panneau droit
+    - Flash cyan (#00b4d8) sur les nœuds traversés par un flux actif (durée 900ms)
+    - Illumination des arêtes du chemin en cours (cyan vif, largeur 4px, durée 2.5s)
+
+  [PANNEAU DROIT — Info panel (330px)]
+
+    Bloc "Switch sélectionné" :
+      - État (AUTH OK / EN ATTENTE / HORS LIGNE)
+      - Countdown token avec heure d'expiration
+      - Idle (secondes depuis dernier paquet)
+      - DID complet
+      - Bouton "Quarantaine" (POST /quarantine/<id>) — actif si switch auth
+      - Bouton "Restaurer"   (POST /restore/<id>)   — actif si switch non-auth
+      - Bouton "Re-auth"     (POST /reauth/<id>)    — re-auth individuelle
+      - Bloc Ping : sélecteur destination + "▶ Ping" (continu) + "■ Stop"
+        Le ping SSE stream en temps réel dans un terminal intégré coloré.
+
+    Onglets "Switches" / "Flux réseau" :
+      Onglet Switches :
+        - Liste scrollable des 22 switches
+        - Point coloré (vert/jaune/gris) + état + DID court + countdown token
+        - Clic sur une ligne → sélectionne le switch dans le graphe ET la liste
+
+      Onglet "Flux réseau" :
+        - Vue chemin horizontal : [s14] ▶ [s11] ▶ [s1] ▶ [s2] ▶ [s3]
+          Chaque switch = pill violette, flèches entre les nœuds
+        - Badge "N hops" par route (ex : "5 hops")
+        - Séparation aller/retour avec labels "→ Aller" / "← Retour"
+          quand les deux directions sont présentes simultanément
+        - IPs source/destination colorées (vert/bleu)
+        - Plus de DID affiché (simplifié pour la lisibilité)
+        - Badge rouge "+N" sur l'onglet quand de nouveaux flux arrivent
+        - État vide : icône centrée + "Lancez un ping pour visualiser les routes"
+
+    Bloc "Journal d'événements" (bas du panneau) :
+      - Log horodaté des changements d'état détectés
+      - Icônes : ✅ auth, 🔴 quarantaine, 🔵 restauration, ⏰ expiration, 💤 inactivité
+      - Max 60 entrées, affichage des 25 dernières
+      - Se met à jour en temps réel via SSE
+
+MÉCANISME DE MISE À JOUR (SSE) :
+  Le serveur maintient une connexion SSE ouverte avec le navigateur.
+  Toutes les secondes, il compare le contenu de /tmp/sdn_auth_status.json avec
+  la version précédente. Si changement → envoie l'événement SSE.
+  Le JS client appelle applyStatus() qui met à jour TOUT le dashboard en une passe.
+
+ILLUMINATION DES ROUTES (BFS côté navigateur) :
+  Quand un nouveau flux IP est détecté (via _flow_seq), le dashboard recalcule
+  le chemin en BFS (même logique que Dijkstra Ryu) sur le sous-graphe des
+  switches authentifiés. Il illumine les nœuds et arêtes du chemin pendant 2.5s.
+  La correspondance IP→DPID est : 10.0.0.X → dpid X (hX connecté à sX).
+
+ACTIONS QUARANTAINE/RESTAURATION VIA DASHBOARD :
+  Le bouton "Quarantaine" dans le détail du switch envoie POST /quarantine/<id>.
+  Le serveur exécute ovs-vsctl del-controller s<id> → le switch perd son contrôleur
+  → EventSwitchLeave dans Ryu → retrait de la whitelist + recalcul routes.
+  Le bouton "Restaurer" envoie POST /restore/<id>.
+  Le serveur exécute ovs-vsctl set-controller s<id> tcp:127.0.0.1:6633 → reconnexion
+  → mais le switch doit RE-S'AUTHENTIFIER (reauth) pour être à nouveau autorisé.
+  Une notification toast s'affiche en bas à droite pendant 2.8s.
+
+DÉTECTION DES CHANGEMENTS D'ÉTAT (côté JS) :
+  La fonction detectChanges() compare le statut précédent et actuel pour chaque
+  switch et génère automatiquement une entrée dans le journal :
+    - unknown → auth      : "s5 authentifié — switch_5:e0d5e0be"
+    - auth → connected    : "s5 token expiré / mis en quarantaine"
+    - auth → unknown      : "s5 perdu (inactivité ou déconnexion)"
+
+--------------------------------------------------------------------------------
+8.3. WATCHDOG OVS (monitor.py)
+--------------------------------------------------------------------------------
+Un troisième terminal xterm (lancé par topo_projet.py) vérifie toutes les 0.5s
+si le contrôleur Ryu est connecté aux switches (via "ovs-vsctl show").
+Affiche "CONTROLEUR EN LIGNE (SECURE)" ou "CONTROLEUR HS / DÉCONNECTÉ".
+Résistant aux crashes (try/except global → jamais de fermeture de fenêtre).
+
+================================================================================
+9. FICHIER DE STATUT JSON (/tmp/sdn_auth_status.json)
+================================================================================
+
+Ce fichier est la "mémoire partagée" entre le contrôleur et le dashboard.
+Structure :
+  {
+    "1": {"state": "auth", "did": "did:sdn:switch_1:c88627d2",
+          "expiry": 1741700300.0, "last_seen": 1741700010.5},
+    "2": {"state": "connected"},
+    "3": {"state": "unknown"},
+    ...
+    "22": {...},
+    "_edges": [[1,2], [1,4], [2,3], ...],     ← Liens topologiques (dédupliqués)
+    "_flows": [                                 ← 40 derniers flux IP
+      {"t": 1741700015.2, "dpid": 1, "did": "did:...", "src": "10.0.0.1", "dst": "10.0.0.5"},
+      ...
+    ],
+    "_flow_seq": 42                             ← Compteur monotone de flux
+  }
+
+================================================================================
+10. SCÉNARIOS OPÉRATIONNELS
+================================================================================
+
+10.1. DÉMARRAGE NORMAL
+-----------------------
+  Terminal 1 (contrôleur) :
+    cd ~/Bureau/DID
+    source ../depin_env/bin/activate
+    ryu-manager --observe-links did_controller.py ryu.topology.switches
+
+  Terminal 2 (topologie) :
+    sudo python3 ~/Bureau/topologies/topo_projet.py
+
+  Ce qui se passe automatiquement :
+    - Ryu démarre, charge la blockchain (ledger.json)
+    - Ouvre le terminal auth_monitor.py en xterm
+    - Mininet démarre, connecte les 22 switches à Ryu
+    - Ryu découvre la topologie via LLDP (EventLinkAdd) → graphe NetworkX
+    - topo_projet.py injecte les tables ARP statiques
+    - topo_projet.py lance l'auth DID séquentielle via agent_auth.py
+    - Ryu valide les 22 switches → install les règles de routage
+    - Le réseau est opérationnel
+
+10.2. TEST DE CONNECTIVITÉ
+---------------------------
+  Dans le CLI Mininet :
+    mininet> pingall        ← Test tous les hôtes entre eux
+    mininet> h1 ping h15   ← Test spécifique
+
+10.3. SIMULATION DE PANNE
+--------------------------
+  Dans le CLI Mininet :
+    mininet> link s1 s2 down    ← Coupe un lien
+    mininet> link s1 s2 up      ← Rétablit le lien
+
+  Résultat :
+    - EventLinkDelete → purge des routes → recalcul Dijkstra
+    - Le trafic est rerouté automatiquement par un chemin alternatif
+
+10.4. QUARANTAINE MANUELLE D'UN SWITCH
+----------------------------------------
+  Couper la connexion d'un switch au contrôleur (sans le déconnecter du réseau) :
+    mininet> sh ovs-vsctl del-controller s1
+
+  Résultat :
+    - EventSwitchLeave → switch retiré du graphe + authenticated_dpid
+    - Routes recalculées sans s1
+
+  Restauration :
+    mininet> sh ovs-vsctl set-controller s1 tcp:127.0.0.1:6633
+
+10.5. RE-AUTHENTIFICATION
+--------------------------
+  Automatique — re-auth proactive (did_controller.py) :
+    Déclenchée par _expiry_monitor quand remaining < 300s.
+    Utilise nsenter vers h{dpid} pour exécuter agent_auth.py.
+    Aucune interruption de service : token renouvelé avant expiration.
+
+  Automatique — watchdog hôte (agent_auth.py --watchdog) :
+    Lancé en background par topo_projet.py sur chaque hôte.
+    Re-auth toutes les 1500s (25 min), indépendamment du contrôleur.
+
+  Via dashboard :
+    Bouton "Re-auth" sur le détail d'un switch (POST /reauth/<id>)
+    Bouton "🔐 Re-auth tout" dans le header (POST /reauth)
+
+  Via CLI Mininet :
+    mininet> reauth        ← Re-authentifie les 22 switches séquentiellement
+
+  Via terminal (pour un seul switch) :
+    python3 /home/debian/Bureau/DID/agent_auth.py switch_3
+
+10.6. EXPIRATION AUTOMATIQUE
+-----------------------------
+  Après 5 minutes sans re-auth :
+    → Le thread _expiry_monitor détecte auth_expiry[dpid] < now
+    → Le switch est mis en quarantaine
+    → Les routes qui le traversaient sont recalculées
+    → Le switch reste dans self.net (graphe) pour reprise rapide si re-auth
+
+  Après 60s d'inactivité (sans aucun paquet) :
+    → Même comportement
+
+10.7. DÉTECTION DE SPOOFING
+-----------------------------
+  Si un switch malveillant tente de s'authentifier avec le DID d'un autre :
+    - L'agent envoie: {"did": "did:sdn:switch_5:...", "signature": "..."}
+    - Mais le switch émetteur est physiquement s3 (dpid=3)
+    - claimed_id = 5 ≠ dpid = 3
+    → Message "SPOOFING DETECTE" + rejet de l'auth
+
+================================================================================
+11. DÉPENDANCES ET ENVIRONNEMENT
+================================================================================
+
+11.1. ENVIRONNEMENT PYTHON
+---------------------------
+  Virtualenv : /home/debian/Bureau/depin_env/
+  Activation : source ~/Bureau/depin_env/bin/activate
+
+  Bibliothèques Python requises :
+    - ryu            → Framework SDN (contrôleur OpenFlow)
+    - networkx       → Graphe topologique + Dijkstra
+    - ecdsa          → Signature ECDSA (SECP256k1)
+    - (hashlib, json, socket, subprocess : stdlib Python)
+
+11.2. LOGICIELS SYSTÈME
+------------------------
+  - Mininet         → Simulation réseau (switches OVS, hôtes Linux)
+  - Open vSwitch    → Implémentation software des switches OpenFlow
+  - xterm           → Pour les terminaux de monitoring
+  - Python 3.11     → Version utilisée
+
+11.3. MODÈLE OPENFLOW
+-----------------------
+  OpenFlow 1.3 (OFP_VERSIONS = [ofproto_v1_3.OFP_VERSION])
+  Port de contrôle : TCP 6633 (localhost)
+  Module Ryu complémentaire : ryu.topology.switches (découverte LLDP)
+
+================================================================================
+12. POINTS TECHNIQUES IMPORTANTS / DÉCISIONS D'ARCHITECTURE
+================================================================================
+
+1. STP DÉSACTIVÉ
+   Le Spanning Tree Protocol est désactivé sur tous les switches (failMode='secure'
+   + pas de configuration STP). C'est Ryu + Dijkstra qui gère la topologie.
+   Raison : STP bloquait les chemins alternatifs nécessaires à la redondance.
+
+2. PAS DE FLOOD
+   Contrairement à un contrôleur L2 classique, il n'y a AUCUN OFPP_FLOOD.
+   Si la destination est inconnue → DROP.
+   Raison : le flood causerait des broadcast storms dans une topologie maillée.
+
+3. ARP STATIQUE
+   Les 22×22 entrées ARP sont injectées au démarrage.
+   Raison : éliminer le besoin de flood ARP, qui est la première source de
+   boucles dans un réseau sans STP.
+
+4. IDLE_TIMEOUT = 10s SUR LES RÈGLES DE ROUTAGE
+   Les règles OpenFlow expirent après 10s d'inactivité.
+   Raison : permet au contrôleur de recevoir des PacketIn périodiques pour
+   mettre à jour last_seen et détecter l'inactivité des switches.
+
+5. AUTH SÉQUENTIELLE (délai 0.3s entre chaque switch)
+   L'authentification des 22 switches se fait en séquence avec 0.3s d'intervalle.
+   Raison : éviter la surcharge du contrôleur Ryu si 22 paquets d'auth arrivent
+   simultanément (Ryu est single-threaded avec greenthreads).
+
+6. ANTI-SPOOFING PAR DPID PHYSIQUE
+   Le DPID OpenFlow est attribué par OVS à la connexion, indépendamment du DID.
+   Même si un attaquant forge un DID, son DPID physique le trahit.
+
+7. BLOCKCHAIN LOCALE (PAS DE RÉSEAU P2P)
+   La blockchain est un fichier JSON local, pas distribuée.
+   Pour un vrai déploiement, il faudrait un réseau P2P de pairs qui valident
+   les blocs. Ici c'est une simulation de la mécanique cryptographique.
+
+8. COOKIE ROUTING = 0xDEAD1
+   Les règles de routage portent ce cookie pour pouvoir être purgées
+   sélectivement sans toucher à la règle table-miss (cookie=0).
+
+================================================================================
+13. LIMITATIONS CONNUES ET POINTS D'AMÉLIORATION POTENTIELS
+================================================================================
+
+1. BLOCKCHAIN NON DISTRIBUÉE : La blockchain est locale. Pour du vrai
+   décentralisé, il faudrait un réseau de nœuds pairs.
+
+2. PAS DE RÉVOCATION DE CLÉS : Actuellement, aucun mécanisme de révocation
+   d'une identité compromise (hormis le fait de ne pas la mettre dans la chain).
+
+3. TIMESTAMP ANTI-REJEU NON VALIDÉ CÔTÉ CONTRÔLEUR : Le contrôleur vérifie
+   la signature mais ne vérifie pas que le timestamp est "récent" (fenêtre de
+   tolérance). Un paquet capturé et rejoué dans la même seconde serait accepté.
+
+4. UDP SANS GARANTIE : Le protocole d'auth utilise UDP (pas de TCP).
+   L'agent compense en envoyant 3 fois le même paquet.
+
+5. CLÉS PRIVÉES EN CLAIR DANS secrets.json : Dans un vrai système, les clés
+   privées devraient être dans un HSM ou chiffrées.
+
+================================================================================
+14. RÉSUMÉ DES COMMANDES ESSENTIELLES
+================================================================================
+
+Démarrer le contrôleur :
+  cd ~/Bureau/DID && source ../depin_env/bin/activate
+  ryu-manager --observe-links did_controller.py ryu.topology.switches
+
+Démarrer la topologie Mininet :
+  sudo python3 ~/Bureau/topologies/topo_projet.py
+
+Démarrer le dashboard web (optionnel, terminal séparé) :
+  cd ~/Bureau/DID && python3 dashboard_server.py
+  → Accès : http://localhost:8181
+
+Re-authentifier tous les switches (depuis CLI Mininet) :
+  mininet> reauth
+
+Authentifier un switch manuellement :
+  python3 /home/debian/Bureau/DID/agent_auth.py switch_1
+
+Mettre un switch en quarantaine manuelle :
+  mininet> sh ovs-vsctl del-controller s1
+
+Restaurer un switch :
+  mininet> sh ovs-vsctl set-controller s1 tcp:127.0.0.1:6633
+
+Tester la connectivité :
+  mininet> pingall
+  mininet> h1 ping h22
+
+================================================================================
+15. CHANGELOG DES SESSIONS DE DÉVELOPPEMENT
+================================================================================
+
+--------------------------------------------------------------------------------
+SESSION 1 — 11 mars 2026
+--------------------------------------------------------------------------------
+Mise en place initiale du système, tests fonctionnels et corrections majeures.
+
+CORRECTIONS :
+  - Suppression du STP (bloquait les chemins alternatifs)
+  - Remplacement OFPP_FLOOD par DROP (évite les broadcast storms)
+  - Injection ARP statique (22×22 entrées) pour contourner l'absence de flood ARP
+  - Auth séquentielle au lieu de parallèle (évite la surcharge Ryu)
+  - Auth intégrée dans topo_projet.py (depuis chaque hôte via net.get)
+  - idle_timeout=10s sur les flow rules de routage (permet monitoring activité)
+
+TESTS VALIDÉS :
+  - Ping h14 → h3 : route s14→s11→s1→s2→s3
+  - Quarantaine s11 : h14 isolé, 100% perte
+  - Quarantaine s1 + recalcul Dijkstra : route alternative en 7 hops
+  - Dashboard web (port 8181) complet avec re-auth individuelle/globale
+
+--------------------------------------------------------------------------------
+SESSION 2 — 23 mars 2026
+--------------------------------------------------------------------------------
+Améliorations UX du dashboard et autonomie de l'authentification.
+
+DASHBOARD — PING :
+  - Suppression du sélecteur de count (remplacé par ping continu)
+  - Deux boutons : "▶ Ping" (continu) et "■ Stop"
+  - Côté serveur : ping sans -c, stoppé par déconnexion SSE (proc.kill en finally)
+
+DASHBOARD — ONGLET FLUX RÉSEAU :
+  - Vue chemin horizontal : pills violettes [sX] ▶ [sY] ▶ [sZ]
+  - Badge "N hops" par route
+  - Séparation visuelle aller/retour avec labels dédiés
+  - Suppression de l'affichage DID (trop verbeux pour une démo)
+  - État vide illustré avec icône centrée
+
+DASHBOARD — MODE DÉMO :
+  - 15 scénarios scriptés (Client→Serveur Web, App→DB, Backup→Stockage, etc.)
+  - Thread de fond dans dashboard_server.py, pings 5 paquets, pause 3s entre chaque
+  - Bouton header "▶ Mode Démo" avec indicateur pulsant orange quand actif
+  - Label du scénario courant affiché dans le header
+  - Polling /demo toutes les 2s pour mise à jour du label
+  - Bascule automatique sur l'onglet Flux réseau au démarrage
+
+AUTONOMIE AUTH — POINT 1 (contrôleur) :
+  - Nouvelle constante REAUTH_THRESHOLD = 300
+  - self.reauth_pending : set pour éviter les doublons de re-auth
+  - _check_expired_auths : détecte remaining < 300s → hub.spawn(_trigger_reauth)
+  - _trigger_reauth : nsenter vers h{dpid} + agent_auth.py switch_{dpid}
+  - _handle_auth_packet : reauth_pending.discard(dpid) au succès
+
+AUTONOMIE AUTH — POINT 3 (watchdog hôte) :
+  - agent_auth.py : WATCHDOG_INTERVAL = 1500, fonction watchdog(), flag --watchdog
+  - topo_projet.py : lancement des 22 watchdogs en background après auth initiale
+
+COMPORTEMENT QUARANTAINE MANUELLE avec les nouveaux mécanismes :
+  - Point 1 : inactif (switch plus dans authenticated_dpid) → pas de re-auth
+  - Point 3 : paquet droppé par OVS en failMode='secure' sans contrôleur → inoffensif
+  - Les deux mécanismes respectent une quarantaine manuelle sans intervention
+
+================================================================================
+FIN DE LA DOCUMENTATION
+================================================================================

@@ -1,0 +1,25 @@
+# Private keys — never commit
+keystore/secrets.json
+# (keystore/secrets.example.json is intentionally tracked)
+
+# Python virtual environments
+depin_env/
+venv/
+.venv/
+env/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Runtime files (generated at runtime)
+/tmp/
+
+# Ryu framework source (external dependency)
+ryu/
+
+# OS files
+.DS_Store
+*.swp

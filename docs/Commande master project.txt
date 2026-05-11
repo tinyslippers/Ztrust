@@ -1,0 +1,21 @@
+Commande master project
+
+--- LANCER RYU (DID + Routage dynamique) ---
+cd ~/Bureau/DID
+source ../depin_env/bin/activate
+ryu-manager --observe-links --ofp-listen-host 0.0.0.0 --ofp-tcp-listen-port 6633 did_controller.py ryu.topology.switches
+
+--- LANCER MININET ---
+sudo mn -c
+cd ~/Bureau/topologies
+sudo python3 topo_projet.py
+
+--- AUTHENTIFIER LES SWITCHES (depuis un hôte Mininet ou terminal) ---
+cd ~/Bureau/DID
+source ../depin_env/bin/activate
+python3 full_auth.py
+
+--- TESTER LA RESILIENCE (dans la CLI Mininet) ---
+# Couper un switch :   link s1 s5 down   OU   switch s5 stop
+# Pingall pour vérifier le reroutage automatique
+# Remettre en ligne :  link s1 s5 up     OU   switch s5 start
