@@ -14,26 +14,23 @@ The controller dynamically computes optimal routes via **Dijkstra (NetworkX)**, 
 
 ## Architecture
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                        SDN Controller                        │
-│   Ryu (did_controller.py)  +  ryu.topology.switches (LLDP)  │
-│                                                              │
-│   ┌─────────────┐   ┌──────────────┐   ┌─────────────────┐  │
-│   │ DID / ECDSA │   │  Blockchain  │   │ Dijkstra Routes │  │
-│   │   verifier  │   │   (ledger)   │   │   (NetworkX)    │  │
-│   └─────────────┘   └──────────────┘   └─────────────────┘  │
-└──────────────────────────────┬──────────────────────────────┘
-                               │ OpenFlow 1.3
-        ┌──────────────────────┼──────────────────────┐
-        │                      │                      │
-   ┌────┴────┐            ┌────┴────┐            ┌────┴────┐
-   │  sX     │            │  sY     │            │  sZ     │
-   │ (auth)  │            │ (auth)  │            │ (quar.) │
-   └────┬────┘            └────┬────┘            └─────────┘
-        │                      │               DROP all traffic
-       hX                     hY              (except UDP:9999)
-  (10.0.0.X)             (10.0.0.Y)
+```mermaid
+flowchart TB
+    subgraph Controller["🧠 SDN Controller — Ryu + LLDP"]
+        direction LR
+        DID["DID / ECDSA\nverifier"]
+        BC["Blockchain\nledger"]
+        DJ["Dijkstra\nroutes (NetworkX)"]
+    end
+
+    Controller -->|"OpenFlow 1.3"| sX & sY & sZ
+
+    sX["✅ sX — Authenticated\nFlow rules installed"]
+    sY["✅ sY — Authenticated\nFlow rules installed"]
+    sZ["🔴 sZ — Quarantined\nDROP all traffic\n(except UDP:9999)"]
+
+    sX --- hX["hX\n10.0.0.X"]
+    sY --- hY["hY\n10.0.0.Y"]
 ```
 
 **Zero Trust enforcement:**
@@ -151,29 +148,30 @@ sudo python3 dashboard_server.py
 
 ## How Zero Trust Works
 
-```
-Switch connects                Controller receives connection
-      │                               │
-      ▼                               ▼
-table-miss rule installed      All traffic DROPPED
-(UDP:9999 only forwarded)      except auth packets
+```mermaid
+sequenceDiagram
+    participant SW as Switch (agent_auth.py)
+    participant C as Controller (did_controller.py)
+    participant BC as Blockchain (ledger.json)
 
-Switch agent sends:
-  { did, message, signature }
-  via UDP broadcast → port 9999
-          │
-          ▼
-  Controller verifies:
-  1. ECDSA signature (secp256k1)
-  2. DID exists in blockchain
-  3. Physical DPID == DID claim  ← anti-spoofing
-          │
-     ┌────┴────┐
-   FAIL       PASS
-     │           │
-   DROP       Switch added to authenticated set
-              Flow rules installed via Dijkstra
-              Token lifetime: 30 min
+    SW->>C: Connect via OpenFlow
+    C->>SW: Install table-miss rule (DROP all except UDP:9999)
+
+    SW->>C: UDP:9999 — { did, message, signature, timestamp }
+    C->>BC: Lookup public key for DID
+    BC-->>C: public_key_hex
+
+    C->>C: 1. Verify ECDSA signature (secp256k1)
+    C->>C: 2. Anti-replay — check timestamp freshness
+    C->>C: 3. Anti-spoof — physical DPID == DID claim?
+
+    alt Auth OK
+        C->>C: Add switch to authenticated set
+        C->>SW: Install Dijkstra flow rules ✅
+        Note over C,SW: Token lifetime: 30 min
+    else Auth FAIL
+        C->>SW: No rules installed — traffic stays DROPPED ❌
+    end
 ```
 
 ---
