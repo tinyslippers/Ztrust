@@ -19,7 +19,7 @@ from urllib.parse import urlparse, parse_qs
 
 STATUS_FILE = '/tmp/sdn_auth_status.json'
 PIDS_FILE   = '/tmp/mn_host_pids.json'
-AGENT_PATH  = '/home/debian/Bureau/DID/agent_auth.py'
+AGENT_PATH  = '/home/debian/Bureau/Ztrust/DID/agent_auth.py'
 PORT = 8181
 HTML_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'dashboard.html')
 

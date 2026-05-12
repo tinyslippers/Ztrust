@@ -176,6 +176,36 @@ sequenceDiagram
 
 ---
 
+## Attack Simulation
+
+`DID/attack_simulation.py` validates the three Zero Trust enforcement layers against concrete adversarial scenarios. Run it while Ryu and Mininet are active:
+
+```bash
+sudo python3 DID/attack_simulation.py
+```
+
+Each attacker switch is quarantined and reconnected before its test (simulating a node that just (re)joined the network after compromise), ensuring a clean unauthenticated state.
+
+| # | Scenario | Attacker | Defense triggered | Expected result |
+|---|---|---|---|---|
+| 1 | **Fake ECDSA signature** | s18 sends valid DID + random 64-byte signature | `verify_signature()` → False | s18 stays `connected` — never authenticated |
+| 2 | **DPID spoofing / impersonation** | s19 sends s1's valid signed token | Anti-spoof: `dpid(19) ≠ claimed_id(1)` | s19 stays `connected` — impersonation blocked |
+| 3 | **Traffic injection without auth** | h20 pings h1 while s20 is unauthenticated | Table-miss DROP rule (priority 0) | 100% packet loss — no frames forwarded |
+| 4 | **Isolation check** | — | — | s1/s2/s3 remain `auth` and reachable throughout |
+
+Results are saved to `/tmp/attack_results.json` after each run.
+
+```
+✓ PASS  Attack 1 — Fake ECDSA signature
+✓ PASS  Attack 2 — DPID spoofing / impersonation
+✓ PASS  Attack 3 — Traffic injection without auth
+✓ PASS  Attack 4 — Isolation (legitimate nodes)
+
+All defenses validated — impact confined to attacked nodes.
+```
+
+---
+
 ## Dashboard
 
 The dashboard at `http://localhost:8181` provides:
