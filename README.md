@@ -16,7 +16,7 @@ The controller dynamically computes optimal routes via **Dijkstra (NetworkX)**, 
 
 ```mermaid
 flowchart TB
-    subgraph Controller["🧠 SDN Controller — Ryu + LLDP"]
+    subgraph Controller[" SDN Controller — Ryu + LLDP"]
         direction LR
         DID["DID / ECDSA\nverifier"]
         BC["Blockchain\nledger"]
