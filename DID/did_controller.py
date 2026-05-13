@@ -46,6 +46,7 @@ INACTIVITY_TIMEOUT = 300   # Quarantine if no packet received for X seconds
 CHECK_INTERVAL     = 15    # Expiration check interval (seconds)
 REAUTH_THRESHOLD   = 300   # Proactive re-auth if token expires in less than X seconds
 OVERHEAD_FILE      = '/tmp/sdn_overhead.json'  # ECDSA overhead measurements
+NUM_SWITCHES       = 22
 
 # ANSI color codes for terminal output
 class C:
@@ -165,6 +166,12 @@ class DIDController(app_manager.RyuApp):
             did = data.get('did')
             sig = data.get('signature')
             msg_content = data.get('message')
+
+            # Timestamp freshness check (anti-replay: reject packets older than 30 s)
+            ts = data.get('timestamp')
+            if ts is None or abs(time.time() - float(ts)) > 30:
+                self.logger.warning("Auth packet rejected — stale timestamp (dpid=%s)", dpid)
+                return
 
             # 1. Cryptographic verification (ECDSA signature) — overhead measurement
             t_auth_start = time.time()
@@ -613,7 +620,7 @@ class DIDController(app_manager.RyuApp):
         """Writes the auth state of all switches to a JSON file."""
         now    = time.time()
         status = {}
-        for dpid in range(1, 23):
+        for dpid in range(1, NUM_SWITCHES + 1):
             if dpid in self.authenticated_dpid:
                 status[str(dpid)] = {
                     'state'    : 'auth',

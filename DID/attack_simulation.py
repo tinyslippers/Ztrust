@@ -40,6 +40,7 @@ AUTH_PORT     = 9999
 ATK_FAKE_SIG = 18   # Attack 1
 ATK_SPOOF    = 19   # Attack 2 — impersonates SPOOF_VICTIM
 ATK_NO_AUTH  = 20   # Attack 3
+ATK_REPLAY   = 21   # Attack 5 — stale timestamp replay
 SPOOF_VICTIM = 1    # Switch being impersonated in Attack 2
 
 # Legitimate switches — must stay authenticated throughout all attacks
@@ -106,6 +107,18 @@ def make_valid_payload(switch_name: str, secrets: dict) -> bytes:
     identity = secrets[switch_name]
     did = identity['did']
     ts  = str(int(time.time()))
+    msg = f"AuthRequest:{did}:{ts}"
+    sk  = SigningKey.from_string(binascii.unhexlify(identity['private_key']), curve=SECP256k1)
+    sig = binascii.hexlify(sk.sign(msg.encode())).decode()
+    return json.dumps({'did': did, 'message': msg,
+                       'signature': sig, 'timestamp': ts}).encode()
+
+
+def make_stale_payload(switch_name: str, secrets: dict, age_s: int = 31) -> bytes:
+    """Build a cryptographically valid payload whose timestamp is `age_s` seconds old."""
+    identity = secrets[switch_name]
+    did = identity['did']
+    ts  = str(int(time.time()) - age_s)
     msg = f"AuthRequest:{did}:{ts}"
     sk  = SigningKey.from_string(binascii.unhexlify(identity['private_key']), curve=SECP256k1)
     sig = binascii.hexlify(sk.sign(msg.encode())).decode()
@@ -272,6 +285,33 @@ def check_isolation(pids: dict) -> bool:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# ATTACK 5 — Timestamp replay (requires freshness check in did_controller.py)
+# ══════════════════════════════════════════════════════════════════════════════
+
+def attack5_timestamp_replay(pids: dict, secrets: dict) -> bool | None:
+    sid = ATK_REPLAY
+    hdr(f"ATTACK 5 — Timestamp replay  (attacker: s{sid})")
+    info(f"s{sid} sends a cryptographically valid packet whose timestamp is 31 s old.")
+    info(f"Defense: freshness check — abs(now - ts) > 30 s → packet rejected.")
+
+    if not reset_attacker(sid):
+        info("Could not reset attacker to 'connected' state — skipping.")
+        return None
+
+    payload = make_stale_payload(f'switch_{sid}', secrets, age_s=31)
+    send_udp(pids[sid], payload)
+    time.sleep(1.5)
+
+    state = get_state(sid)
+    if state != 'auth':
+        blocked(f"s{sid} state='{state}' — stale packet rejected (timestamp too old).")
+        return True
+    else:
+        fail(f"s{sid} state='auth' — freshness check missing or disabled. Defense FAILED.")
+        return False
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # MAIN
 # ══════════════════════════════════════════════════════════════════════════════
 
@@ -286,7 +326,12 @@ def main():
         sys.exit("[ERROR] Must run as root: sudo python3 DID/attack_simulation.py")
 
     pids    = load_pids()
-    secrets = json.load(open(KEYSTORE))
+    try:
+        with open(KEYSTORE) as f:
+            secrets = json.load(f)
+    except FileNotFoundError:
+        sys.exit(f"[ERROR] Keystore not found: {KEYSTORE}\n"
+                 f"       Run 'python3 DID/gen_did.py' to generate keys first.")
 
     # Ensure legitimate nodes are authenticated before starting
     info(f"Pre-authenticating legitimate nodes {LEGITIMATE} if needed …")
@@ -307,6 +352,7 @@ def main():
     results['attack2_dpid_spoofing']    = attack2_dpid_spoofing(pids, secrets)
     results['attack3_no_auth_traffic']  = attack3_traffic_no_auth(pids)
     results['attack4_isolation']        = check_isolation(pids)
+    results['attack5_timestamp_replay'] = attack5_timestamp_replay(pids, secrets)
 
     # ── Summary ───────────────────────────────────────────────────────────────
     hdr("RESULTS SUMMARY")
@@ -315,6 +361,7 @@ def main():
         'attack2_dpid_spoofing'   : 'Attack 2 — DPID spoofing / impersonation',
         'attack3_no_auth_traffic' : 'Attack 3 — Traffic injection without auth',
         'attack4_isolation'       : 'Attack 4 — Isolation (legitimate nodes)',
+        'attack5_timestamp_replay': 'Attack 5 — Timestamp replay (stale packet)',
     }
     all_pass = True
     for key, label in labels.items():

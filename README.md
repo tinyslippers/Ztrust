@@ -1,6 +1,6 @@
 # ZTrust — Zero Trust SDN with Decentralized Identities
 
-> A research prototype combining **Software-Defined Networking**, **Zero Trust architecture**, and **Decentralized Identifiers (DID)** for autonomous switch authentication in a 22-node mesh topology.
+> A research prototype combining **Software-Defined Networking**, **Zero Trust architecture**, and **Decentralized Identifiers (DID)** for autonomous switch authentication in a 22-node partial mesh topology (hub-and-spoke extended).
 
 ---
 
@@ -178,7 +178,12 @@ sequenceDiagram
 
 ## Attack Simulation
 
-`DID/attack_simulation.py` validates the three Zero Trust enforcement layers against concrete adversarial scenarios. Run it while Ryu and Mininet are active:
+> **Branch:** this suite lives on the [`attack-scenarios`](../../tree/attack-scenarios) branch.
+> ```bash
+> git checkout attack-scenarios
+> ```
+
+`DID/attack_simulation.py` validates the Zero Trust enforcement layers against concrete adversarial scenarios. Run it while Ryu and Mininet are active:
 
 ```bash
 sudo python3 DID/attack_simulation.py
@@ -192,6 +197,7 @@ Each attacker switch is quarantined and reconnected before its test (simulating 
 | 2 | **DPID spoofing / impersonation** | s19 sends s1's valid signed token | Anti-spoof: `dpid(19) ≠ claimed_id(1)` | s19 stays `connected` — impersonation blocked |
 | 3 | **Traffic injection without auth** | h20 pings h1 while s20 is unauthenticated | Table-miss DROP rule (priority 0) | 100% packet loss — no frames forwarded |
 | 4 | **Isolation check** | — | — | s1/s2/s3 remain `auth` and reachable throughout |
+| 5 | **Timestamp replay** | s21 replays a valid packet with a 31 s-old timestamp | Freshness check: `abs(now − ts) > 30` → DROP | s21 stays `connected` — stale packet rejected |
 
 Results are saved to `/tmp/attack_results.json` after each run.
 
@@ -200,6 +206,7 @@ Results are saved to `/tmp/attack_results.json` after each run.
 ✓ PASS  Attack 2 — DPID spoofing / impersonation
 ✓ PASS  Attack 3 — Traffic injection without auth
 ✓ PASS  Attack 4 — Isolation (legitimate nodes)
+✓ PASS  Attack 5 — Timestamp replay (stale packet)
 
 All defenses validated — impact confined to attacked nodes.
 ```
@@ -218,6 +225,14 @@ The dashboard at `http://localhost:8181` provides:
 - **Flow view** — path captured once per ping (frozen during session)
 - **Demo mode** — 15 scripted scenarios cycling automatically
 - **Event log** — auth events, expirations, quarantines
+
+---
+
+## Known Limitations
+
+- **Local blockchain** — `ledger.json` is a single-node, non-distributed ledger. A host with write access to this file could replace it without consensus. For production, replace with a distributed ledger (e.g. Hyperledger Fabric).
+- **OpenFlow without TLS** — the controller-to-switch channel (TCP 6633) is unencrypted. A MitM on the management network could inject or modify flow rules.
+- **Anti-replay scope** — prior to the current version, incoming auth packets were validated only by token expiry (30 min lifetime) with no freshness check on the packet timestamp itself, leaving a 30-minute replay window. Fixed: `_handle_auth_packet()` now rejects packets where `abs(now − ts) > 30 s`.
 
 ---
 

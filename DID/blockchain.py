@@ -12,7 +12,8 @@ class Block:
         self.hash = self.calculate_hash()
 
     def calculate_hash(self):
-        block_string = json.dumps(self.__dict__, sort_keys=True).encode()
+        fields = {k: v for k, v in self.__dict__.items() if k != 'hash'}
+        block_string = json.dumps(fields, sort_keys=True).encode()
         return hashlib.sha256(block_string).hexdigest()
 
 class Blockchain:
@@ -21,8 +22,25 @@ class Blockchain:
         self.chain = []
         if os.path.exists(filename):
             self.load_chain()
+            if not self.is_valid():
+                raise ValueError("BLOCKCHAIN COMPROMISED — ledger.json has been tampered with")
         else:
             self.create_genesis_block()
+
+    def is_valid(self):
+        for i in range(1, len(self.chain)):
+            current  = self.chain[i]
+            previous = self.chain[i - 1]
+
+            if current.hash != current.calculate_hash():
+                print(f"[BLOCKCHAIN] ⚠️  Bloc {i} altéré — hash invalide")
+                return False
+
+            if current.previous_hash != previous.hash:
+                print(f"[BLOCKCHAIN] ⚠️  Chaîne rompue entre bloc {i-1} et {i}")
+                return False
+
+        return True
 
     def create_genesis_block(self):
         genesis_block = Block(0, time.time(), "Genesis Block - Debut du registre DePIN", "0")
