@@ -33,17 +33,17 @@ class Blockchain:
             previous = self.chain[i - 1]
 
             if current.hash != current.calculate_hash():
-                print(f"[BLOCKCHAIN] ⚠️  Bloc {i} altéré — hash invalide")
+                print(f"[BLOCKCHAIN] ⚠️  Block {i} tampered — invalid hash")
                 return False
 
             if current.previous_hash != previous.hash:
-                print(f"[BLOCKCHAIN] ⚠️  Chaîne rompue entre bloc {i-1} et {i}")
+                print(f"[BLOCKCHAIN] ⚠️  Chain broken between block {i-1} and {i}")
                 return False
 
         return True
 
     def create_genesis_block(self):
-        genesis_block = Block(0, time.time(), "Genesis Block - Debut du registre DePIN", "0")
+        genesis_block = Block(0, time.time(), "Genesis Block - DePIN registry root", "0")
         self.chain.append(genesis_block)
         self.save_chain()
 

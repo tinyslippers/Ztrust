@@ -198,7 +198,7 @@ sudo python3 DID/attack_simulation.py
 
 **Threat:** an attacker knows a valid DID (e.g. by sniffing the network) but does not hold the corresponding private key. It sends an auth packet with the correct DID and a random 64-byte value as the signature.
 
-**What the script does:** s18 is reset to `connected`, then sends `{ did: "did:ztrust:switch_18", signature: <64 random bytes> }` over UDP:9999.
+**What the script does:** s18 is reset to `connected`, then sends `{ did: "did:depin:switch_18", signature: <64 random bytes> }` over UDP:9999.
 
 **Defense:** `verify_signature()` calls `VerifyingKey.verify()` (ECDSA secp256k1) against the public key stored in the blockchain. A random signature is cryptographically invalid — verification raises `BadSignatureError` and the function returns `False`. The controller drops the packet without updating the auth state.
 
@@ -210,7 +210,7 @@ sudo python3 DID/attack_simulation.py
 
 **Threat:** an attacker compromises a legitimate switch (s1) and steals its private key. It then uses that key to authenticate from a *different* physical switch (s19), trying to inherit s1's trusted identity.
 
-**What the script does:** s19 is reset, then sends a *cryptographically valid* auth packet signed with s1's private key and containing s1's DID (`did:ztrust:switch_1`). This packet passes ECDSA verification but arrives at the controller tagged with DPID=19.
+**What the script does:** s19 is reset, then sends a *cryptographically valid* auth packet signed with s1's private key and containing s1's DID (`did:depin:switch_1`). This packet passes ECDSA verification but arrives at the controller tagged with DPID=19.
 
 **Defense:** after signature verification, the controller extracts the numeric switch ID from the DID (`switch_1` → `1`) and compares it to the physical DPID of the incoming connection (`19`). Since `19 ≠ 1`, the controller prints `SPOOFING DETECTED` and returns without authenticating.
 
