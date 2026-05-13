@@ -183,23 +183,77 @@ sequenceDiagram
 > git checkout attack-scenarios
 > ```
 
-`DID/attack_simulation.py` validates the Zero Trust enforcement layers against concrete adversarial scenarios. Run it while Ryu and Mininet are active:
+`DID/attack_simulation.py` validates each Zero Trust enforcement layer with a concrete adversarial scenario. The script requires both Ryu and Mininet to be running:
 
 ```bash
 sudo python3 DID/attack_simulation.py
 ```
 
-Each attacker switch is quarantined and reconnected before its test (simulating a node that just (re)joined the network after compromise), ensuring a clean unauthenticated state.
+**Test methodology:** before each attack, the attacker switch is disconnected from the controller and reconnected cleanly (`ovs-vsctl del-controller` / `set-controller`). This ensures it starts unauthenticated, as if a compromised node had just rejoined the network. The script then checks `sdn_auth_status.json` to verify the controller's reaction.
 
-| # | Scenario | Attacker | Defense triggered | Expected result |
-|---|---|---|---|---|
-| 1 | **Fake ECDSA signature** | s18 sends valid DID + random 64-byte signature | `verify_signature()` → False | s18 stays `connected` — never authenticated |
-| 2 | **DPID spoofing / impersonation** | s19 sends s1's valid signed token | Anti-spoof: `dpid(19) ≠ claimed_id(1)` | s19 stays `connected` — impersonation blocked |
-| 3 | **Traffic injection without auth** | h20 pings h1 while s20 is unauthenticated | Table-miss DROP rule (priority 0) | 100% packet loss — no frames forwarded |
-| 4 | **Isolation check** | — | — | s1/s2/s3 remain `auth` and reachable throughout |
-| 5 | **Timestamp replay** | s21 replays a valid packet with a 31 s-old timestamp | Freshness check: `abs(now − ts) > 30` → DROP | s21 stays `connected` — stale packet rejected |
+---
 
-Results are saved to `/tmp/attack_results.json` after each run.
+### Attack 1 — Fake ECDSA Signature
+
+**Threat:** an attacker knows a valid DID (e.g. by sniffing the network) but does not hold the corresponding private key. It sends an auth packet with the correct DID and a random 64-byte value as the signature.
+
+**What the script does:** s18 is reset to `connected`, then sends `{ did: "did:ztrust:switch_18", signature: <64 random bytes> }` over UDP:9999.
+
+**Defense:** `verify_signature()` calls `VerifyingKey.verify()` (ECDSA secp256k1) against the public key stored in the blockchain. A random signature is cryptographically invalid — verification raises `BadSignatureError` and the function returns `False`. The controller drops the packet without updating the auth state.
+
+**Expected result:** s18 remains in state `connected` — it is never added to the authenticated set and receives no flow rules.
+
+---
+
+### Attack 2 — DPID Spoofing / Impersonation
+
+**Threat:** an attacker compromises a legitimate switch (s1) and steals its private key. It then uses that key to authenticate from a *different* physical switch (s19), trying to inherit s1's trusted identity.
+
+**What the script does:** s19 is reset, then sends a *cryptographically valid* auth packet signed with s1's private key and containing s1's DID (`did:ztrust:switch_1`). This packet passes ECDSA verification but arrives at the controller tagged with DPID=19.
+
+**Defense:** after signature verification, the controller extracts the numeric switch ID from the DID (`switch_1` → `1`) and compares it to the physical DPID of the incoming connection (`19`). Since `19 ≠ 1`, the controller prints `SPOOFING DETECTED` and returns without authenticating.
+
+**Expected result:** s19 remains `connected`. s1 (the victim) is unaffected and stays `auth`.
+
+---
+
+### Attack 3 — Traffic Injection Without Authentication
+
+**Threat:** a node on the network attempts to send data frames before authenticating — either because it skipped the DID handshake or its token was revoked.
+
+**What the script does:** s20 is reset and left unauthenticated. h20 (attached to s20) sends 3 ICMP ping packets to h1 (`10.0.0.1`).
+
+**Defense:** when a switch connects, the controller immediately installs a single priority-0 table-miss rule: *any packet that does not match a higher-priority rule is sent to the controller*. No higher-priority rules exist for unauthenticated switches (Dijkstra flow rules are only installed after a successful DID auth). The controller's `_packet_in_handler` receives the packet, sees that `dpid not in authenticated_dpid`, checks that it is not a UDP:9999 auth packet, and **silently drops it** (returns without forwarding).
+
+**Expected result:** 100% packet loss on all 3 pings — no frame reaches h1.
+
+---
+
+### Attack 4 — Isolation (Collateral Damage Check)
+
+**Threat:** the three attacks above could, through a bug or race condition, accidentally revoke the authentication of legitimate switches (e.g. by corrupting shared state or triggering a route recalculation that blocks valid paths).
+
+**What the script does:** after attacks 1–3, the script reads the auth state of s1, s2, and s3 (which were authenticated before the suite started and were never targeted). It also runs a live ping from h1 to h2 to confirm that legitimate traffic still flows.
+
+**Defense:** the controller's auth state is per-DPID and isolated — revoking or blocking one switch has no side effect on others. Route recalculations triggered by quarantine events only remove paths *through* the affected switch; paths between authenticated switches are recomputed and reinstalled.
+
+**Expected result:** s1, s2, s3 all remain in state `auth`. h1 → h2 ping succeeds.
+
+---
+
+### Attack 5 — Timestamp Replay
+
+**Threat:** an attacker captures a valid, signed auth packet from the network and replays it later. Even though the ECDSA signature is genuine, the packet is stale — the switch may have since been revoked or the session expired.
+
+**What the script does:** s21 is reset, then the script builds a *cryptographically valid* signed packet (correct DID, correct signature) but sets the `timestamp` field to `now − 31 seconds`. The packet is sent over UDP:9999.
+
+**Defense:** `_handle_auth_packet()` reads the `timestamp` field from the JSON payload and checks `abs(time.time() - float(ts)) > 30`. A 31-second-old packet exceeds the 30-second window — the controller logs a warning and returns immediately, before even reaching ECDSA verification.
+
+**Expected result:** s21 remains `connected` — the stale packet is rejected at the freshness gate.
+
+---
+
+### Results
 
 ```
 ✓ PASS  Attack 1 — Fake ECDSA signature
@@ -210,6 +264,8 @@ Results are saved to `/tmp/attack_results.json` after each run.
 
 All defenses validated — impact confined to attacked nodes.
 ```
+
+Full results are saved to `/tmp/attack_results.json` after each run.
 
 ---
 
