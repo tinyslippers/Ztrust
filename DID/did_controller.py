@@ -74,6 +74,7 @@ class DIDController(app_manager.RyuApp):
         self.auth_expiry = {}             # {dpid: token expiration timestamp}
         self.last_seen   = {}             # {dpid: last packet timestamp}
         self.reauth_pending = set()       # Switches with proactive re-auth in progress
+        self.did_documents  = {}          # {dpid: full W3C DID Document}
         self.recent_flows = []            # Recent IP flows (for the dashboard)
         self.flow_seq     = 0             # Monotonic flow counter
 
@@ -120,6 +121,7 @@ class DIDController(app_manager.RyuApp):
                 self.auth_expiry.pop(dpid, None)
                 self.last_seen.pop(dpid, None)
                 self.reauth_pending.discard(dpid)
+                self.did_documents.pop(dpid, None)
                 self._write_status()
 
     def _install_table_miss(self, datapath):
@@ -136,12 +138,19 @@ class DIDController(app_manager.RyuApp):
     # =========================================================================
 
     def verify_signature(self, did, message, signature_hex):
-        """Verifies the ECDSA signature of a switch by consulting the blockchain."""
+        """Verifies the ECDSA signature of a switch via W3C DID Document resolution."""
         if not self.ledger:
             return False
-        pub_key_hex = self.ledger.get_public_key(did)
+        did_doc = self.ledger.resolve(did)
+        if not did_doc:
+            self.logger.warning("DID not found or revoked: %s", did)
+            return False
+        pub_key_hex = None
+        for method in did_doc.get("verificationMethod", []):
+            if "keys-1" in method.get("id", ""):
+                pub_key_hex = method.get("publicKeyHex")
+                break
         if not pub_key_hex:
-            self.logger.warning("DID not found in blockchain: %s", did)
             return False
         try:
             vk = VerifyingKey.from_string(binascii.unhexlify(pub_key_hex),
@@ -216,6 +225,7 @@ class DIDController(app_manager.RyuApp):
             self.auth_expiry[dpid] = time.time() + AUTH_LIFETIME
             self.last_seen[dpid]   = time.time()
             self.reauth_pending.discard(dpid)   # Proactive re-auth complete
+            self.did_documents[dpid] = self.ledger.resolve(did)  # Cache full DID Document
 
             expiry_str = time.strftime('%H:%M:%S',
                                        time.localtime(self.auth_expiry[dpid]))
@@ -261,6 +271,7 @@ class DIDController(app_manager.RyuApp):
         self.dpid_to_did.pop(dpid, None)
         self.auth_expiry.pop(dpid, None)
         self.last_seen.pop(dpid, None)
+        self.did_documents.pop(dpid, None)
 
         # 4. Forget hosts connected to this switch
         self.hosts = {
@@ -566,6 +577,7 @@ class DIDController(app_manager.RyuApp):
         self.dpid_to_did.pop(dpid, None)
         self.auth_expiry.pop(dpid, None)
         self.last_seen.pop(dpid, None)
+        self.did_documents.pop(dpid, None)
 
         # Forget hosts connected to this switch
         self.hosts = {

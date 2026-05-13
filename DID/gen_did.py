@@ -1,5 +1,4 @@
 import ecdsa
-import hashlib
 import json
 import os
 # Make sure blockchain.py is in the same directory
@@ -15,47 +14,45 @@ def generate_did_and_store():
     # Reset blockchain to start fresh
     if os.path.exists("ledger.json"):
         os.remove("ledger.json")
-    
+
     my_blockchain = Blockchain("ledger.json")
     keystore = {}
 
     print("--- 🏭 USINE À IDENTITÉS : Démarrage de la production ---")
-    print(f"🎯 Cible : 22 Switchs IoT")
+    print(f"🎯 Cible : 22 Switchs IoT (did:depin method — W3C compliant)")
 
     # Generate identities for all 22 switches
     for i in range(1, 23):
-        switch_name = f"switch_{i}"  # e.g. switch_1, switch_22
+        switch_name = f"switch_{i}"
 
         # 1. Cryptography
         priv, pub = generate_key_pair()
 
-        # 2. Create DID (Decentralized Identifier)
-        # Hash the public key to get a short unique identifier
-        pub_hash = hashlib.sha256(bytes.fromhex(pub)).hexdigest()[:8]
-        did = f"did:sdn:{switch_name}:{pub_hash}"
+        # 2. W3C DID — did:depin method, no hash suffix (human-readable, stable)
+        did = f"did:depin:{switch_name}"
 
-        # 3. Secure storage (what the switch keeps secret)
+        # 3. Secure storage (private key never leaves this file)
         keystore[switch_name] = {
             "name": switch_name,
             "did": did,
             "private_key": priv,
-            "public_key": pub  # Kept here for reference, but is public
+            "public_key": pub
         }
 
-        # 4. Publish to ledger (public information)
+        # 4. Publish full W3C DID Document to ledger (public key only)
         my_blockchain.add_identity(did, pub)
-        print(f"✅ [Switch {i:02d}] Identité forgeé et minée : {did}")
+        print(f"✅ [Switch {i:02d}] DID Document mined : {did}")
 
     # Save the keystore (wallet)
     if not os.path.exists('keystore'):
         os.makedirs('keystore')
-    
+
     with open('keystore/secrets.json', 'w') as f:
         json.dump(keystore, f, indent=4)
-    
+
     print("\n" + "="*50)
     print("📚 REGISTRE DISTRIBUÉ (LEDGER) MIS À JOUR")
-    print("🔐 22 Identités prêtes à être déployées.")
+    print("🔐 22 DID Documents W3C prêts à être déployés.")
     print("="*50)
 
 if __name__ == '__main__':

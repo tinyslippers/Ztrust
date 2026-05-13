@@ -61,7 +61,8 @@ flowchart TB
 .
 ├── DID/
 │   ├── did_controller.py      # Ryu controller — Zero Trust + routing
-│   ├── blockchain.py          # Local blockchain ledger (SHA-256 chained blocks)
+│   ├── blockchain.py          # Local blockchain ledger — stores W3C DID Documents (SHA-256 chained)
+│   ├── did_method_spec.md     # did:depin W3C DID Method specification
 │   ├── agent_auth.py          # Switch authentication agent (runs inside Mininet host)
 │   ├── gen_did.py             # DID + key pair generator for all 22 switches
 │   ├── full_auth.py           # Bulk authentication script (external, for testing)
@@ -301,6 +302,28 @@ The dashboard at `http://localhost:8181` provides:
 
 ---
 
+## DID Method — `did:depin`
+
+ZTrust implements a custom W3C-compliant DID Method named **`did:depin`**. Each switch is identified by a stable DID of the form `did:depin:switch_N` (e.g. `did:depin:switch_1`). The blockchain ledger stores full **W3C DID Documents** — not just raw public keys — including:
+
+- `verificationMethod` — ECDSA secp256k1 public key (`EcdsaSecp256k1VerificationKey2019`)
+- `authentication` — reference to the key used to authenticate the switch
+- `service` — SDN controller endpoint (`udp://controller:9999`)
+- `flow_policy` — ZTrust extension: per-switch traffic policy
+
+**CRUD operations:**
+
+| Operation | Method | Description |
+|---|---|---|
+| **Create** | `Blockchain.add_identity(did, pub_key_hex)` | Appends a new DID Document block to the ledger |
+| **Read** | `Blockchain.resolve(did)` | Returns the latest non-revoked DID Document |
+| **Update** | `Blockchain.add_identity(did, new_pub_key_hex)` | New block supersedes the previous one (latest wins) |
+| **Revoke** | `Blockchain.revoke_identity(did)` | Appends a revocation block — `resolve()` returns `None` |
+
+The full method specification (syntax, security considerations, privacy) is in [`DID/did_method_spec.md`](DID/did_method_spec.md).
+
+---
+
 ## Academic Context
 
 This project explores the intersection of three emerging paradigms:
@@ -309,7 +332,7 @@ This project explores the intersection of three emerging paradigms:
 |---|---|
 | **SDN (OpenFlow 1.3)** | Centralized policy enforcement via flow rules |
 | **Zero Trust** | "Never trust, always verify" — no implicit network trust |
-| **DID (W3C standard)** | Self-sovereign identity without a central authority |
+| **DID (W3C-compliant, did:depin method)** | Self-sovereign identity without a central authority — see `DID/did_method_spec.md` |
 
 The combination of SDN + Zero Trust + DID/blockchain as an integrated system is not yet established in the literature or industry (existing solutions: ZTNA without SDN, SDN+security with centralized PKI, DID for IoT without SDN networking). This architecture aligns with emerging research from 2023–2025.
 

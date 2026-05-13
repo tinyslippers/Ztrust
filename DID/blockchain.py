@@ -47,17 +47,68 @@ class Blockchain:
         self.chain.append(genesis_block)
         self.save_chain()
 
-    def add_identity(self, did, public_key):
+    def add_identity(self, did, public_key_hex, flow_policy=None):
+        did_document = {
+            "@context": "https://www.w3.org/ns/did/v1",
+            "id": did,
+            "verificationMethod": [{
+                "id": f"{did}#keys-1",
+                "type": "EcdsaSecp256k1VerificationKey2019",
+                "controller": did,
+                "publicKeyHex": public_key_hex
+            }],
+            "authentication": [f"{did}#keys-1"],
+            "service": [{
+                "id": f"{did}#sdn",
+                "type": "SDNEndpoint",
+                "serviceEndpoint": "udp://controller:9999"
+            }],
+            "flow_policy": flow_policy or {
+                "allowed_flows": [],
+                "default": "deny"
+            }
+        }
         previous_block = self.chain[-1]
-        new_data = {"did": did, "public_key": public_key}
-        new_block = Block(previous_block.index + 1, time.time(), new_data, previous_block.hash)
+        new_block = Block(
+            previous_block.index + 1,
+            time.time(),
+            did_document,
+            previous_block.hash
+        )
         self.chain.append(new_block)
         self.save_chain()
 
-    def get_public_key(self, did_to_find):
+    def resolve(self, did) -> dict | None:
+        """W3C-compliant DID resolution — returns the latest DID Document."""
         for block in reversed(self.chain):
-            if isinstance(block.data, dict) and block.data.get("did") == did_to_find:
-                return block.data.get("public_key")
+            data = block.data
+            if not isinstance(data, dict):
+                continue
+            if data.get("id") == did and data.get("revoked"):
+                return None
+            if data.get("id") == did and not data.get("revoked"):
+                return data
+        return None
+
+    def revoke_identity(self, did):
+        """Adds a revocation block — resolve() returns None after this."""
+        previous_block = self.chain[-1]
+        new_block = Block(
+            previous_block.index + 1,
+            time.time(),
+            {"id": did, "revoked": True, "revocation_time": time.time()},
+            previous_block.hash
+        )
+        self.chain.append(new_block)
+        self.save_chain()
+
+    def get_public_key(self, did) -> str | None:
+        doc = self.resolve(did)
+        if not doc:
+            return None
+        for method in doc.get("verificationMethod", []):
+            if "keys-1" in method.get("id", ""):
+                return method.get("publicKeyHex")
         return None
 
     def save_chain(self):

@@ -1,229 +1,713 @@
 [
     {
         "index": 0,
-        "timestamp": 1778618654.6121788,
+        "timestamp": 1778673640.5157073,
         "data": "Genesis Block - Debut du registre DePIN",
         "previous_hash": "0",
-        "hash": "a45b39f4be2781f540d4ccf0e857c35688eee104a7b31fa2822be736a22190fb"
+        "hash": "c50defbe153ea43d8e7a93c9d1d8f9ed9a6fc87b151676d578fa70f46cdac3f4"
     },
     {
         "index": 1,
-        "timestamp": 1778618654.6360064,
+        "timestamp": 1778673640.52157,
         "data": {
-            "did": "did:sdn:switch_1:d6a5fb99",
-            "public_key": "18b8f714e63dd9b001c0e1b4ab35c21ac83d2c3e510cbbd8f837bd46b52bc48b7d9c659858a0f8218163c02d7a482c93af080c3a7a7e8fb0bd99b82a8307cd5b"
+            "@context": "https://www.w3.org/ns/did/v1",
+            "id": "did:depin:switch_1",
+            "verificationMethod": [
+                {
+                    "id": "did:depin:switch_1#keys-1",
+                    "type": "EcdsaSecp256k1VerificationKey2019",
+                    "controller": "did:depin:switch_1",
+                    "publicKeyHex": "2e22a59d20356bd97b6b550566943e087cb19bf7554f775119e821aebdd6485d51016d254938f36f5985cd227b9c7b699a4ece2aad241bf1869e081183bfeb18"
+                }
+            ],
+            "authentication": [
+                "did:depin:switch_1#keys-1"
+            ],
+            "service": [
+                {
+                    "id": "did:depin:switch_1#sdn",
+                    "type": "SDNEndpoint",
+                    "serviceEndpoint": "udp://controller:9999"
+                }
+            ],
+            "flow_policy": {
+                "allowed_flows": [],
+                "default": "deny"
+            }
         },
-        "previous_hash": "a45b39f4be2781f540d4ccf0e857c35688eee104a7b31fa2822be736a22190fb",
-        "hash": "2aa2ad3199610e32a9d6841bcece3007c36e74b2efc5f3199ded8e5595327d45"
+        "previous_hash": "c50defbe153ea43d8e7a93c9d1d8f9ed9a6fc87b151676d578fa70f46cdac3f4",
+        "hash": "884525400bd27a7e17fad0dee9544480bc428c269b0968fccc3acc48103ddee1"
     },
     {
         "index": 2,
-        "timestamp": 1778618654.661861,
+        "timestamp": 1778673640.5221703,
         "data": {
-            "did": "did:sdn:switch_2:559e92b8",
-            "public_key": "56134d565128110ee1309a0d8c2761a496069766baba97e75a720ad4ac3ed577fa1b1ed2b0710a87f0424f4172e7ad0a68d44a384fc8ef0e7ce9cecd18bd53b3"
+            "@context": "https://www.w3.org/ns/did/v1",
+            "id": "did:depin:switch_2",
+            "verificationMethod": [
+                {
+                    "id": "did:depin:switch_2#keys-1",
+                    "type": "EcdsaSecp256k1VerificationKey2019",
+                    "controller": "did:depin:switch_2",
+                    "publicKeyHex": "637e5efa4472cde9d3862b2e6bacaec1187ae59911faf6d6ab7ee325a85e7ed5c6508bffa29254f3db7c33afb7fd92315e09117dcb076410b04ecacb2626f706"
+                }
+            ],
+            "authentication": [
+                "did:depin:switch_2#keys-1"
+            ],
+            "service": [
+                {
+                    "id": "did:depin:switch_2#sdn",
+                    "type": "SDNEndpoint",
+                    "serviceEndpoint": "udp://controller:9999"
+                }
+            ],
+            "flow_policy": {
+                "allowed_flows": [],
+                "default": "deny"
+            }
         },
-        "previous_hash": "2aa2ad3199610e32a9d6841bcece3007c36e74b2efc5f3199ded8e5595327d45",
-        "hash": "659663f332cd803d3411fce1191a0e326370b678ad529d4a2b4a4be1970aac65"
+        "previous_hash": "884525400bd27a7e17fad0dee9544480bc428c269b0968fccc3acc48103ddee1",
+        "hash": "62b4a3d854a9d5cade3f2688f34048123256d4a2ffec92ce2ba3308063163d34"
     },
     {
         "index": 3,
-        "timestamp": 1778618654.6702156,
+        "timestamp": 1778673640.5227199,
         "data": {
-            "did": "did:sdn:switch_3:98b45cbd",
-            "public_key": "59e7a1b84fa29182d3b74d5874fc81c72698a806f37925d0d06c5772db537a845495456e43993199dfe096c94d6354008fcfbce8be5bf5c0796cee0414ba53f7"
+            "@context": "https://www.w3.org/ns/did/v1",
+            "id": "did:depin:switch_3",
+            "verificationMethod": [
+                {
+                    "id": "did:depin:switch_3#keys-1",
+                    "type": "EcdsaSecp256k1VerificationKey2019",
+                    "controller": "did:depin:switch_3",
+                    "publicKeyHex": "b7c067df041a9beed8a76d957acb1014ca0509e043f18c502d1595dc45967a74c13ab0df0a8e753c7aab2b381030d068ac2a8af84d752cc8bd412fdc8d63753d"
+                }
+            ],
+            "authentication": [
+                "did:depin:switch_3#keys-1"
+            ],
+            "service": [
+                {
+                    "id": "did:depin:switch_3#sdn",
+                    "type": "SDNEndpoint",
+                    "serviceEndpoint": "udp://controller:9999"
+                }
+            ],
+            "flow_policy": {
+                "allowed_flows": [],
+                "default": "deny"
+            }
         },
-        "previous_hash": "659663f332cd803d3411fce1191a0e326370b678ad529d4a2b4a4be1970aac65",
-        "hash": "2d41edb5f9cb063d7a301d5371c3c7a955baaa0e1065fdd1e499b133e21abeab"
+        "previous_hash": "62b4a3d854a9d5cade3f2688f34048123256d4a2ffec92ce2ba3308063163d34",
+        "hash": "0758c815ff6f236b02a21ecb1ea77375948ddab61d1862ae357d97b78d80b4c6"
     },
     {
         "index": 4,
-        "timestamp": 1778618654.672258,
+        "timestamp": 1778673640.5232239,
         "data": {
-            "did": "did:sdn:switch_4:723ae123",
-            "public_key": "563dd58009272ad165c10398519f96bbca607fd79149ddb9efdaac67a4270e3ba074c61c0c0c034fcf4293883f66915d83e1fe4c486af2f9a85c27a71b0a2766"
+            "@context": "https://www.w3.org/ns/did/v1",
+            "id": "did:depin:switch_4",
+            "verificationMethod": [
+                {
+                    "id": "did:depin:switch_4#keys-1",
+                    "type": "EcdsaSecp256k1VerificationKey2019",
+                    "controller": "did:depin:switch_4",
+                    "publicKeyHex": "f1b39886f5ee7e5f42db278f74a079f500fa7dccd1d1eadf7df464b01f39b17855fdf35f8c920dea5dfdf880e8687826f360035d104e65a1ede847f49656d98a"
+                }
+            ],
+            "authentication": [
+                "did:depin:switch_4#keys-1"
+            ],
+            "service": [
+                {
+                    "id": "did:depin:switch_4#sdn",
+                    "type": "SDNEndpoint",
+                    "serviceEndpoint": "udp://controller:9999"
+                }
+            ],
+            "flow_policy": {
+                "allowed_flows": [],
+                "default": "deny"
+            }
         },
-        "previous_hash": "2d41edb5f9cb063d7a301d5371c3c7a955baaa0e1065fdd1e499b133e21abeab",
-        "hash": "53c0e3d77d3dc65aa993b8fc3e2bee71fce80a68f0522c1745412674402a6e55"
+        "previous_hash": "0758c815ff6f236b02a21ecb1ea77375948ddab61d1862ae357d97b78d80b4c6",
+        "hash": "e75e2374aaece753b424bd68c07ea78814a9ee127375044bf6d3ccb7c77ea34e"
     },
     {
         "index": 5,
-        "timestamp": 1778618654.6743274,
+        "timestamp": 1778673640.5237098,
         "data": {
-            "did": "did:sdn:switch_5:9d180f9e",
-            "public_key": "83fe1878878285802c958ebf902e86a589fb25f14c642d25048e91b8c25a9abe4111899e66a65b75ac4a74646f6e0b6e326ef0354fb83aae7b661a92dc0a45a2"
+            "@context": "https://www.w3.org/ns/did/v1",
+            "id": "did:depin:switch_5",
+            "verificationMethod": [
+                {
+                    "id": "did:depin:switch_5#keys-1",
+                    "type": "EcdsaSecp256k1VerificationKey2019",
+                    "controller": "did:depin:switch_5",
+                    "publicKeyHex": "44c5ffd40b22775bbe2eb569d46805c2f4d2508d36068ac029692dda7147a2eb849529fbe404b3307285aa13e74353b6567b86ffe367395d9db798dc8392a48d"
+                }
+            ],
+            "authentication": [
+                "did:depin:switch_5#keys-1"
+            ],
+            "service": [
+                {
+                    "id": "did:depin:switch_5#sdn",
+                    "type": "SDNEndpoint",
+                    "serviceEndpoint": "udp://controller:9999"
+                }
+            ],
+            "flow_policy": {
+                "allowed_flows": [],
+                "default": "deny"
+            }
         },
-        "previous_hash": "53c0e3d77d3dc65aa993b8fc3e2bee71fce80a68f0522c1745412674402a6e55",
-        "hash": "965d96293743fe99bf20617d56d53ee2b6a72c8e25529bc977c026bba24d04c4"
+        "previous_hash": "e75e2374aaece753b424bd68c07ea78814a9ee127375044bf6d3ccb7c77ea34e",
+        "hash": "4149946666d9da436278a5e41dbbc9e263b7ca3eba21f04384a80bd6e820c71f"
     },
     {
         "index": 6,
-        "timestamp": 1778618654.6830919,
+        "timestamp": 1778673640.5242677,
         "data": {
-            "did": "did:sdn:switch_6:2e7dd865",
-            "public_key": "ed8e6c88169c6df0c2fc3cbb1aab2434651896a3194856d3bd190b7f726656cf866b08670f1cd1c7e4b3363120677d4a4fe6adaaaeb5bdffb494d80f2e6957a7"
+            "@context": "https://www.w3.org/ns/did/v1",
+            "id": "did:depin:switch_6",
+            "verificationMethod": [
+                {
+                    "id": "did:depin:switch_6#keys-1",
+                    "type": "EcdsaSecp256k1VerificationKey2019",
+                    "controller": "did:depin:switch_6",
+                    "publicKeyHex": "7ff6d90baf0317886555e9d552d53ed73d27680b07708b2f592149194d785fd709892905d023c8585832a039464f62df95a19d91fdbc37922e0600fd5d41e453"
+                }
+            ],
+            "authentication": [
+                "did:depin:switch_6#keys-1"
+            ],
+            "service": [
+                {
+                    "id": "did:depin:switch_6#sdn",
+                    "type": "SDNEndpoint",
+                    "serviceEndpoint": "udp://controller:9999"
+                }
+            ],
+            "flow_policy": {
+                "allowed_flows": [],
+                "default": "deny"
+            }
         },
-        "previous_hash": "965d96293743fe99bf20617d56d53ee2b6a72c8e25529bc977c026bba24d04c4",
-        "hash": "4877c4d941b77df153c1a4f3f6c93e4abc6ba46d0f91a9d66292ef74597ab80f"
+        "previous_hash": "4149946666d9da436278a5e41dbbc9e263b7ca3eba21f04384a80bd6e820c71f",
+        "hash": "129d5d519a47c6b332b72711c10ec65eeca4bc4be6c50d1128b09cf70884a70b"
     },
     {
         "index": 7,
-        "timestamp": 1778618654.6850893,
+        "timestamp": 1778673640.5248666,
         "data": {
-            "did": "did:sdn:switch_7:af8a3caa",
-            "public_key": "698e9453e0cb29528cf6e296c110a2018564189b524a3a6f3fa760d50f8c88039cdc3e5e9b2d37001f813af9630158226bcaa23762f5cc09638007717d70490c"
+            "@context": "https://www.w3.org/ns/did/v1",
+            "id": "did:depin:switch_7",
+            "verificationMethod": [
+                {
+                    "id": "did:depin:switch_7#keys-1",
+                    "type": "EcdsaSecp256k1VerificationKey2019",
+                    "controller": "did:depin:switch_7",
+                    "publicKeyHex": "c8fe865b8ab2d20b8f043ffb0e596427d1cab84a4fa3f51dc314d980352f61684e404e548fcbd363653f54321ff1b85f7e3dc50bc45238799ef3c582967160b2"
+                }
+            ],
+            "authentication": [
+                "did:depin:switch_7#keys-1"
+            ],
+            "service": [
+                {
+                    "id": "did:depin:switch_7#sdn",
+                    "type": "SDNEndpoint",
+                    "serviceEndpoint": "udp://controller:9999"
+                }
+            ],
+            "flow_policy": {
+                "allowed_flows": [],
+                "default": "deny"
+            }
         },
-        "previous_hash": "4877c4d941b77df153c1a4f3f6c93e4abc6ba46d0f91a9d66292ef74597ab80f",
-        "hash": "15fca8bfa1b233380c99121115210cc4ec72de3fbf9aff828516a6e2225dd2df"
+        "previous_hash": "129d5d519a47c6b332b72711c10ec65eeca4bc4be6c50d1128b09cf70884a70b",
+        "hash": "80246204b93f18740e6950fea63d6b12f46b205a59faef792452e1ff4ea4a006"
     },
     {
         "index": 8,
-        "timestamp": 1778618654.714675,
+        "timestamp": 1778673640.5254388,
         "data": {
-            "did": "did:sdn:switch_8:ee9ff091",
-            "public_key": "ee71832e3227e7280401870e2da8625b4c796c1a5b7487774cf5f9505e43fe03a80dd7760437661de2e263e71c3d9e23ea6160e047fa03272045585b4f2ec8db"
+            "@context": "https://www.w3.org/ns/did/v1",
+            "id": "did:depin:switch_8",
+            "verificationMethod": [
+                {
+                    "id": "did:depin:switch_8#keys-1",
+                    "type": "EcdsaSecp256k1VerificationKey2019",
+                    "controller": "did:depin:switch_8",
+                    "publicKeyHex": "6ab9d484aa666500e7f520259de6810ff24fbc7ede91a4755a8ca3ad9746136771db449e3be7e2fcfd3d129a82fbdf6b1bd61373bd1f5cebed397e994009b20b"
+                }
+            ],
+            "authentication": [
+                "did:depin:switch_8#keys-1"
+            ],
+            "service": [
+                {
+                    "id": "did:depin:switch_8#sdn",
+                    "type": "SDNEndpoint",
+                    "serviceEndpoint": "udp://controller:9999"
+                }
+            ],
+            "flow_policy": {
+                "allowed_flows": [],
+                "default": "deny"
+            }
         },
-        "previous_hash": "15fca8bfa1b233380c99121115210cc4ec72de3fbf9aff828516a6e2225dd2df",
-        "hash": "8a4876d0e2e4c34d5b2ca225d8687a26ad36fa7e18999902e00e13b1c6807de0"
+        "previous_hash": "80246204b93f18740e6950fea63d6b12f46b205a59faef792452e1ff4ea4a006",
+        "hash": "7f00eee121658918c07df3dd41eca6fbbe4d1372fc4bd60305ccd3cdf1a0028c"
     },
     {
         "index": 9,
-        "timestamp": 1778618654.7161713,
+        "timestamp": 1778673640.5259979,
         "data": {
-            "did": "did:sdn:switch_9:25d34488",
-            "public_key": "a72e43bcdb1f4f4e2d1e01833e906979dfd385a919289b81ec30e04c66e2da91db887f51a5d68be47994b3c93bf67c297877d2e2c0e958be167631ae28bd99ab"
+            "@context": "https://www.w3.org/ns/did/v1",
+            "id": "did:depin:switch_9",
+            "verificationMethod": [
+                {
+                    "id": "did:depin:switch_9#keys-1",
+                    "type": "EcdsaSecp256k1VerificationKey2019",
+                    "controller": "did:depin:switch_9",
+                    "publicKeyHex": "a2cde12b55003313eb62bef124efe518c0b08179d49c2ec5c071211a1aceb103d6db349f8113c55f7a76fc847ed6ef9c1856a0c9cfe718e1cb386647c0730fe2"
+                }
+            ],
+            "authentication": [
+                "did:depin:switch_9#keys-1"
+            ],
+            "service": [
+                {
+                    "id": "did:depin:switch_9#sdn",
+                    "type": "SDNEndpoint",
+                    "serviceEndpoint": "udp://controller:9999"
+                }
+            ],
+            "flow_policy": {
+                "allowed_flows": [],
+                "default": "deny"
+            }
         },
-        "previous_hash": "8a4876d0e2e4c34d5b2ca225d8687a26ad36fa7e18999902e00e13b1c6807de0",
-        "hash": "4cea3607f397b8568bc84c5fcfbf7f09d28309a9f8e1e14ef314b2d2fd1be60b"
+        "previous_hash": "7f00eee121658918c07df3dd41eca6fbbe4d1372fc4bd60305ccd3cdf1a0028c",
+        "hash": "e3a14dd70b347827cf0b11351f9658cfd17d21b928e46c350d0fc79780c47a40"
     },
     {
         "index": 10,
-        "timestamp": 1778618654.7186155,
+        "timestamp": 1778673640.5265884,
         "data": {
-            "did": "did:sdn:switch_10:82ec0e63",
-            "public_key": "ac49d124e1836a23dbc16ddc14026a248286b8ae45b289069d8c983a3d3a2397058db6991affc96e402d82a10a6e7fe6323ec5df026aa31857527167183ce7ee"
+            "@context": "https://www.w3.org/ns/did/v1",
+            "id": "did:depin:switch_10",
+            "verificationMethod": [
+                {
+                    "id": "did:depin:switch_10#keys-1",
+                    "type": "EcdsaSecp256k1VerificationKey2019",
+                    "controller": "did:depin:switch_10",
+                    "publicKeyHex": "1d95d3b632f039868347a2dcf8c3e984959f2dd1d767615771453ef587eceba4e01b7fb02db98f22d5b0719ce26a868c26c66130be63cb55bed11151562e3edb"
+                }
+            ],
+            "authentication": [
+                "did:depin:switch_10#keys-1"
+            ],
+            "service": [
+                {
+                    "id": "did:depin:switch_10#sdn",
+                    "type": "SDNEndpoint",
+                    "serviceEndpoint": "udp://controller:9999"
+                }
+            ],
+            "flow_policy": {
+                "allowed_flows": [],
+                "default": "deny"
+            }
         },
-        "previous_hash": "4cea3607f397b8568bc84c5fcfbf7f09d28309a9f8e1e14ef314b2d2fd1be60b",
-        "hash": "8511d0d0ab471c0b4de3a31b30e9a8c78270c8fc96c7eec29f3f14bc816c0cad"
+        "previous_hash": "e3a14dd70b347827cf0b11351f9658cfd17d21b928e46c350d0fc79780c47a40",
+        "hash": "98efee3376e515f2b5713626b082f7fd098bba5636c5c8c5d5b908aa6f44be00"
     },
     {
         "index": 11,
-        "timestamp": 1778618654.7204533,
+        "timestamp": 1778673640.5271935,
         "data": {
-            "did": "did:sdn:switch_11:f85f54dc",
-            "public_key": "47b2649bbd50cc9322f9e8105f59ec98b054166db3d92703cb77371bbc4749f930fa47c9823b4eae648556c8c989a0e30a72faf832234f32270262d53ce95312"
+            "@context": "https://www.w3.org/ns/did/v1",
+            "id": "did:depin:switch_11",
+            "verificationMethod": [
+                {
+                    "id": "did:depin:switch_11#keys-1",
+                    "type": "EcdsaSecp256k1VerificationKey2019",
+                    "controller": "did:depin:switch_11",
+                    "publicKeyHex": "c83bfe49001e0ca000e9648f15d94c61384b3a9176bb7b5156bb7c418303eead4b34b5e7f9d4a45d7b4d15a06f1c56a462f7827f3d40d5def4006eec57a09207"
+                }
+            ],
+            "authentication": [
+                "did:depin:switch_11#keys-1"
+            ],
+            "service": [
+                {
+                    "id": "did:depin:switch_11#sdn",
+                    "type": "SDNEndpoint",
+                    "serviceEndpoint": "udp://controller:9999"
+                }
+            ],
+            "flow_policy": {
+                "allowed_flows": [],
+                "default": "deny"
+            }
         },
-        "previous_hash": "8511d0d0ab471c0b4de3a31b30e9a8c78270c8fc96c7eec29f3f14bc816c0cad",
-        "hash": "e9bf8db23c528c00773b0ea93be7f117914e9dafba69794d5d755659ed3c2fd3"
+        "previous_hash": "98efee3376e515f2b5713626b082f7fd098bba5636c5c8c5d5b908aa6f44be00",
+        "hash": "18901e23092cc393e4602788df0b73d1191d828681b8b76cc5da6e13b22930e8"
     },
     {
         "index": 12,
-        "timestamp": 1778618654.7268665,
+        "timestamp": 1778673640.5277922,
         "data": {
-            "did": "did:sdn:switch_12:14927d03",
-            "public_key": "1f8f6919a4355dce4d8a2000d0e23a21c80e8acb16ac59a8959a262c9faa8b8691e127bfa81511ded7cf77c78b31a4dd074d49669b1886334a760ddca3d89394"
+            "@context": "https://www.w3.org/ns/did/v1",
+            "id": "did:depin:switch_12",
+            "verificationMethod": [
+                {
+                    "id": "did:depin:switch_12#keys-1",
+                    "type": "EcdsaSecp256k1VerificationKey2019",
+                    "controller": "did:depin:switch_12",
+                    "publicKeyHex": "b507fae95996d3d06f24ebf19b07433e26caf07f95e94349116c42643758ef5cec98397eec53c773d8a81c84b00518148e507efe5ef01576d1c4533759692ea2"
+                }
+            ],
+            "authentication": [
+                "did:depin:switch_12#keys-1"
+            ],
+            "service": [
+                {
+                    "id": "did:depin:switch_12#sdn",
+                    "type": "SDNEndpoint",
+                    "serviceEndpoint": "udp://controller:9999"
+                }
+            ],
+            "flow_policy": {
+                "allowed_flows": [],
+                "default": "deny"
+            }
         },
-        "previous_hash": "e9bf8db23c528c00773b0ea93be7f117914e9dafba69794d5d755659ed3c2fd3",
-        "hash": "486965b4242453feb1d730f7aef325d67e269a42c6b28436e0e1f20c1625657e"
+        "previous_hash": "18901e23092cc393e4602788df0b73d1191d828681b8b76cc5da6e13b22930e8",
+        "hash": "36ccd4e1c6f2e488cb8d6fc53c29558f2eacc24f713cb8b20092011f58a510cf"
     },
     {
         "index": 13,
-        "timestamp": 1778618654.7281377,
+        "timestamp": 1778673640.528402,
         "data": {
-            "did": "did:sdn:switch_13:ba653028",
-            "public_key": "c6c260f9250b89f17a3cc12aed30219ab9cbcc1c9f2e442a6019c113af3fe90914c5edb185fefe4331239296a59ddaa10bc4363a83418cb29a71cf09ec8a38ef"
+            "@context": "https://www.w3.org/ns/did/v1",
+            "id": "did:depin:switch_13",
+            "verificationMethod": [
+                {
+                    "id": "did:depin:switch_13#keys-1",
+                    "type": "EcdsaSecp256k1VerificationKey2019",
+                    "controller": "did:depin:switch_13",
+                    "publicKeyHex": "173e2ec566dc067bacebddfca7092b486d7c5806856825e3f22ff36424289426b7f0d827a6aab7e121b7f10ed566e79274618e4e61e2f955bc0b28f307dfdcd2"
+                }
+            ],
+            "authentication": [
+                "did:depin:switch_13#keys-1"
+            ],
+            "service": [
+                {
+                    "id": "did:depin:switch_13#sdn",
+                    "type": "SDNEndpoint",
+                    "serviceEndpoint": "udp://controller:9999"
+                }
+            ],
+            "flow_policy": {
+                "allowed_flows": [],
+                "default": "deny"
+            }
         },
-        "previous_hash": "486965b4242453feb1d730f7aef325d67e269a42c6b28436e0e1f20c1625657e",
-        "hash": "b4092d4b1e6e854288b96c10c989cec7c2d95c42cdd10e5262d645a7b5b884d7"
+        "previous_hash": "36ccd4e1c6f2e488cb8d6fc53c29558f2eacc24f713cb8b20092011f58a510cf",
+        "hash": "62e93fcd71a4d4ab5a063428fb79d36a91e47124ba8cc3da1f77e18dfd6587aa"
     },
     {
         "index": 14,
-        "timestamp": 1778618654.7396076,
+        "timestamp": 1778673640.5290787,
         "data": {
-            "did": "did:sdn:switch_14:add7f254",
-            "public_key": "c41e8a0c7f6110ceb0bb35dc9b3d9a6daf4e16a574d8c9dbe5bb6f73c15a6ec89617499dcaef043397449bf1b283f6cc894c3d77c51299ca2fd74a06bc8191f6"
+            "@context": "https://www.w3.org/ns/did/v1",
+            "id": "did:depin:switch_14",
+            "verificationMethod": [
+                {
+                    "id": "did:depin:switch_14#keys-1",
+                    "type": "EcdsaSecp256k1VerificationKey2019",
+                    "controller": "did:depin:switch_14",
+                    "publicKeyHex": "3b1652f71c4fbb597bd313d0c202f748f0ebdcbd67894d1c9940394b2f79237f08f67608f8b4421470e2de11effbc6c97599890ecdb21eaf26c3268a3b72110c"
+                }
+            ],
+            "authentication": [
+                "did:depin:switch_14#keys-1"
+            ],
+            "service": [
+                {
+                    "id": "did:depin:switch_14#sdn",
+                    "type": "SDNEndpoint",
+                    "serviceEndpoint": "udp://controller:9999"
+                }
+            ],
+            "flow_policy": {
+                "allowed_flows": [],
+                "default": "deny"
+            }
         },
-        "previous_hash": "b4092d4b1e6e854288b96c10c989cec7c2d95c42cdd10e5262d645a7b5b884d7",
-        "hash": "4f4533ea07be9e4e645d5382e9b031c96b62de946117420cd28f4704a5a6a2ed"
+        "previous_hash": "62e93fcd71a4d4ab5a063428fb79d36a91e47124ba8cc3da1f77e18dfd6587aa",
+        "hash": "e1714edb3a35dc064053fcd7b4291047d5130fa6c6919957040a167a9c78ca22"
     },
     {
         "index": 15,
-        "timestamp": 1778618654.7411973,
+        "timestamp": 1778673640.5296955,
         "data": {
-            "did": "did:sdn:switch_15:713eedc7",
-            "public_key": "937118e21b07b0b1517924eeabee81957535b7a8fa8cba75ebd886c97de92f0d193fc9bcc4006c47713f91dc001c3405c50fe6f5947d9d8dfacd3617e8462857"
+            "@context": "https://www.w3.org/ns/did/v1",
+            "id": "did:depin:switch_15",
+            "verificationMethod": [
+                {
+                    "id": "did:depin:switch_15#keys-1",
+                    "type": "EcdsaSecp256k1VerificationKey2019",
+                    "controller": "did:depin:switch_15",
+                    "publicKeyHex": "c5ef69e25bae1123571d8c35adcf5ebe4ca02611520716321a37fae01062d7a1b5bb6c0e7e1dabcd3d569a2980c527fcb4e27a46ec720f60e3b59e1765ed8597"
+                }
+            ],
+            "authentication": [
+                "did:depin:switch_15#keys-1"
+            ],
+            "service": [
+                {
+                    "id": "did:depin:switch_15#sdn",
+                    "type": "SDNEndpoint",
+                    "serviceEndpoint": "udp://controller:9999"
+                }
+            ],
+            "flow_policy": {
+                "allowed_flows": [],
+                "default": "deny"
+            }
         },
-        "previous_hash": "4f4533ea07be9e4e645d5382e9b031c96b62de946117420cd28f4704a5a6a2ed",
-        "hash": "f409f33b9b5b500d2da599d9fb7df67627ac7891d6ef59a779ffa73589a6c945"
+        "previous_hash": "e1714edb3a35dc064053fcd7b4291047d5130fa6c6919957040a167a9c78ca22",
+        "hash": "c67dd318a3a121c4d555475dca9bbf26168b5f3af60cbd71a5b7dea6a7f2d5ba"
     },
     {
         "index": 16,
-        "timestamp": 1778618654.7427723,
+        "timestamp": 1778673640.531198,
         "data": {
-            "did": "did:sdn:switch_16:0085098c",
-            "public_key": "cd3a2f67540c21004a71ab45a0ea71c117552378adad24cd20ecd380cb55c4125e4072edced3b464a7b5b01157a23ae7d770e8f99b51e8a3261bd0f1c50e6f75"
+            "@context": "https://www.w3.org/ns/did/v1",
+            "id": "did:depin:switch_16",
+            "verificationMethod": [
+                {
+                    "id": "did:depin:switch_16#keys-1",
+                    "type": "EcdsaSecp256k1VerificationKey2019",
+                    "controller": "did:depin:switch_16",
+                    "publicKeyHex": "75fb4aff3c74e50b2ce1bb2c60e02fe833a4d6d19eed5e5f09440b818400acc2a088b02f00559705b7836999fbf11038e78da75932c92907c9feac143ef6a9f2"
+                }
+            ],
+            "authentication": [
+                "did:depin:switch_16#keys-1"
+            ],
+            "service": [
+                {
+                    "id": "did:depin:switch_16#sdn",
+                    "type": "SDNEndpoint",
+                    "serviceEndpoint": "udp://controller:9999"
+                }
+            ],
+            "flow_policy": {
+                "allowed_flows": [],
+                "default": "deny"
+            }
         },
-        "previous_hash": "f409f33b9b5b500d2da599d9fb7df67627ac7891d6ef59a779ffa73589a6c945",
-        "hash": "461c427cc945db9358b127163077b67185a24331b21872c0efef02c29d1b9d5a"
+        "previous_hash": "c67dd318a3a121c4d555475dca9bbf26168b5f3af60cbd71a5b7dea6a7f2d5ba",
+        "hash": "9f8656f65280111cbcff79f1b6fc7ebf9fb932277a999bb59486ca448c71b184"
     },
     {
         "index": 17,
-        "timestamp": 1778618654.7443194,
+        "timestamp": 1778673640.5320127,
         "data": {
-            "did": "did:sdn:switch_17:73216648",
-            "public_key": "e50f5c865d52ea6d596dbbe0582384739b5a825081af54b9ffaadd0d160322c2609b8f4cde325fec3563163f11fa2531490df585cb44a1b3b23a06360ada8b4d"
+            "@context": "https://www.w3.org/ns/did/v1",
+            "id": "did:depin:switch_17",
+            "verificationMethod": [
+                {
+                    "id": "did:depin:switch_17#keys-1",
+                    "type": "EcdsaSecp256k1VerificationKey2019",
+                    "controller": "did:depin:switch_17",
+                    "publicKeyHex": "14101964f78f537588122e164ef4f5bc06ff20446664d668b5bb969991eccc004ad5c73409ceb43ab76a11807d55e3215e1e777415065265285d4091259949ef"
+                }
+            ],
+            "authentication": [
+                "did:depin:switch_17#keys-1"
+            ],
+            "service": [
+                {
+                    "id": "did:depin:switch_17#sdn",
+                    "type": "SDNEndpoint",
+                    "serviceEndpoint": "udp://controller:9999"
+                }
+            ],
+            "flow_policy": {
+                "allowed_flows": [],
+                "default": "deny"
+            }
         },
-        "previous_hash": "461c427cc945db9358b127163077b67185a24331b21872c0efef02c29d1b9d5a",
-        "hash": "caf6a60cda8fe8a679654165f7f01c6b7015bd32e5fda382697f4d6f7918ab08"
+        "previous_hash": "9f8656f65280111cbcff79f1b6fc7ebf9fb932277a999bb59486ca448c71b184",
+        "hash": "7b9d4244eda9d718581eade2f81c80a712b147be59b31b090e8c30171b4558c0"
     },
     {
         "index": 18,
-        "timestamp": 1778618654.745908,
+        "timestamp": 1778673640.532766,
         "data": {
-            "did": "did:sdn:switch_18:d10e1697",
-            "public_key": "6558f706655119d20e1ffa109714a528221fa9208d6b268fb95a3a9ed263a45a2e79b79b49ccec6467baa876ccb551be94bcfda9f1ebb78cc4d82bacc64f05d2"
+            "@context": "https://www.w3.org/ns/did/v1",
+            "id": "did:depin:switch_18",
+            "verificationMethod": [
+                {
+                    "id": "did:depin:switch_18#keys-1",
+                    "type": "EcdsaSecp256k1VerificationKey2019",
+                    "controller": "did:depin:switch_18",
+                    "publicKeyHex": "6672ab746d406ba6c8418adde9f8416f1d9c526fc8282bed8db4da5cda97af30bd2e41140d49ced723f8492eebad8693d81bce0b658e5a1fa82bfe2ab89751c5"
+                }
+            ],
+            "authentication": [
+                "did:depin:switch_18#keys-1"
+            ],
+            "service": [
+                {
+                    "id": "did:depin:switch_18#sdn",
+                    "type": "SDNEndpoint",
+                    "serviceEndpoint": "udp://controller:9999"
+                }
+            ],
+            "flow_policy": {
+                "allowed_flows": [],
+                "default": "deny"
+            }
         },
-        "previous_hash": "caf6a60cda8fe8a679654165f7f01c6b7015bd32e5fda382697f4d6f7918ab08",
-        "hash": "0161aeeb15c861cc906b2a823b226437451f37ba2f668e7d1d6411de9fd839da"
+        "previous_hash": "7b9d4244eda9d718581eade2f81c80a712b147be59b31b090e8c30171b4558c0",
+        "hash": "fcd8101e626433b2031a5421421b0c4cfa90b255212844abca1e9aea95deb150"
     },
     {
         "index": 19,
-        "timestamp": 1778618654.7618897,
+        "timestamp": 1778673640.5335124,
         "data": {
-            "did": "did:sdn:switch_19:08abc21d",
-            "public_key": "c6d2278d056f303d4e3f8998581d69dcad9efbb56b2a93b8f0874742a3a97f35a51be13ff650cf8f6a4d1c5563862fc170d4c56596ec08268331d830bdd4a91c"
+            "@context": "https://www.w3.org/ns/did/v1",
+            "id": "did:depin:switch_19",
+            "verificationMethod": [
+                {
+                    "id": "did:depin:switch_19#keys-1",
+                    "type": "EcdsaSecp256k1VerificationKey2019",
+                    "controller": "did:depin:switch_19",
+                    "publicKeyHex": "66c91137046fbdea9d5f89afa1502aa9598bc6d9840e0367d45033838791d866a3f1b0d3928fb27fcd3c23a4d00484211d4c162c609b923ea4ff4d777c454789"
+                }
+            ],
+            "authentication": [
+                "did:depin:switch_19#keys-1"
+            ],
+            "service": [
+                {
+                    "id": "did:depin:switch_19#sdn",
+                    "type": "SDNEndpoint",
+                    "serviceEndpoint": "udp://controller:9999"
+                }
+            ],
+            "flow_policy": {
+                "allowed_flows": [],
+                "default": "deny"
+            }
         },
-        "previous_hash": "0161aeeb15c861cc906b2a823b226437451f37ba2f668e7d1d6411de9fd839da",
-        "hash": "368eb2bac8b488d9d2316d9518b9fef765f24abc29132bcfa7eea80f609385b0"
+        "previous_hash": "fcd8101e626433b2031a5421421b0c4cfa90b255212844abca1e9aea95deb150",
+        "hash": "b4de1c4972260db83f07b531619a2faa756ad8d7566300f83561a8fe2e86d220"
     },
     {
         "index": 20,
-        "timestamp": 1778618654.7636302,
+        "timestamp": 1778673640.5342255,
         "data": {
-            "did": "did:sdn:switch_20:8fda1ea3",
-            "public_key": "3c0091737c2bc7e78d5b8b1b8a7f2061ac45198b869283b9d476e990f5bc6b65c4379341f942b7464c73c20cd428250dca18df4e0a132060f935af4d832c4d83"
+            "@context": "https://www.w3.org/ns/did/v1",
+            "id": "did:depin:switch_20",
+            "verificationMethod": [
+                {
+                    "id": "did:depin:switch_20#keys-1",
+                    "type": "EcdsaSecp256k1VerificationKey2019",
+                    "controller": "did:depin:switch_20",
+                    "publicKeyHex": "1a65ca20a8b1a9dcaecbe3e6ce93618d8ff631669c64d4631651acfd7c08e8d6a6bee7399feb8b916bcba1ac7db55ef829991bb22c85faec60dc9c5aaad8b4a3"
+                }
+            ],
+            "authentication": [
+                "did:depin:switch_20#keys-1"
+            ],
+            "service": [
+                {
+                    "id": "did:depin:switch_20#sdn",
+                    "type": "SDNEndpoint",
+                    "serviceEndpoint": "udp://controller:9999"
+                }
+            ],
+            "flow_policy": {
+                "allowed_flows": [],
+                "default": "deny"
+            }
         },
-        "previous_hash": "368eb2bac8b488d9d2316d9518b9fef765f24abc29132bcfa7eea80f609385b0",
-        "hash": "481fd98be405be881008d35f7bc4ad20c87a55435af2bdc683bd4c5ac103e06d"
+        "previous_hash": "b4de1c4972260db83f07b531619a2faa756ad8d7566300f83561a8fe2e86d220",
+        "hash": "38ad50e857c1b3e5e64d40270b9a31b640af37bf264da4debb3350b24a7cf3e4"
     },
     {
         "index": 21,
-        "timestamp": 1778618654.7652967,
+        "timestamp": 1778673640.5349755,
         "data": {
-            "did": "did:sdn:switch_21:2fd9483c",
-            "public_key": "928cb95dbc6dbd90e56c3ac7444485d42eccfff4e4ed482cac22c2c032247b6d20f81d264435a3eedf3cfa9cdfdc7193a8f4c57e5c5417cf31f5275b9fc0de92"
+            "@context": "https://www.w3.org/ns/did/v1",
+            "id": "did:depin:switch_21",
+            "verificationMethod": [
+                {
+                    "id": "did:depin:switch_21#keys-1",
+                    "type": "EcdsaSecp256k1VerificationKey2019",
+                    "controller": "did:depin:switch_21",
+                    "publicKeyHex": "0dc93a80796a2fa4d5cfce4b808bd172f43504de5c37e4e9f4ad11520e09688417a28e1e2c31e0bf98aeeac0e346da7f1dbfcd8336881314c8bfeec8bec91dcd"
+                }
+            ],
+            "authentication": [
+                "did:depin:switch_21#keys-1"
+            ],
+            "service": [
+                {
+                    "id": "did:depin:switch_21#sdn",
+                    "type": "SDNEndpoint",
+                    "serviceEndpoint": "udp://controller:9999"
+                }
+            ],
+            "flow_policy": {
+                "allowed_flows": [],
+                "default": "deny"
+            }
         },
-        "previous_hash": "481fd98be405be881008d35f7bc4ad20c87a55435af2bdc683bd4c5ac103e06d",
-        "hash": "3f32072da35ec95b56aa315b18ca1cf7805124be8671f626d7cadc231201404d"
+        "previous_hash": "38ad50e857c1b3e5e64d40270b9a31b640af37bf264da4debb3350b24a7cf3e4",
+        "hash": "117d14703e193b2c61c4a6c41b88fcdaba8b61df8ed2beb198c942057e3fc213"
     },
     {
         "index": 22,
-        "timestamp": 1778618654.7668958,
+        "timestamp": 1778673640.5357413,
         "data": {
-            "did": "did:sdn:switch_22:27d1fb9c",
-            "public_key": "d041929f370f664130af70cf9bcfd65f440bafd3e2480ee157bed3b2d21b973fc209d8855fa8e3ea742672f834114a70d6f10311f34a654d85ee8e02b31c6a73"
+            "@context": "https://www.w3.org/ns/did/v1",
+            "id": "did:depin:switch_22",
+            "verificationMethod": [
+                {
+                    "id": "did:depin:switch_22#keys-1",
+                    "type": "EcdsaSecp256k1VerificationKey2019",
+                    "controller": "did:depin:switch_22",
+                    "publicKeyHex": "b26eeb1ee732b4e4803c772af6f13c20a2cb4f74874647941dcdf2e62889cf33f308e006e429c5d576b209794463ca86429db4828ffc8e6ed77cc48182a5689f"
+                }
+            ],
+            "authentication": [
+                "did:depin:switch_22#keys-1"
+            ],
+            "service": [
+                {
+                    "id": "did:depin:switch_22#sdn",
+                    "type": "SDNEndpoint",
+                    "serviceEndpoint": "udp://controller:9999"
+                }
+            ],
+            "flow_policy": {
+                "allowed_flows": [],
+                "default": "deny"
+            }
         },
-        "previous_hash": "3f32072da35ec95b56aa315b18ca1cf7805124be8671f626d7cadc231201404d",
-        "hash": "a34fd270c6b64df37bde807322598566aaceece27a4ffa67494f846bcde66f35"
+        "previous_hash": "117d14703e193b2c61c4a6c41b88fcdaba8b61df8ed2beb198c942057e3fc213",
+        "hash": "c5066aebba53b76b01930519c616ea2ea40c9dfd102a091d76da8a46c1b1ed43"
     }
 ]
