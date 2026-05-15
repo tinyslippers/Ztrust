@@ -1,1604 +1,1113 @@
 <!DOCTYPE html>
+<!--
+  Ztrust SDN Dashboard — drop-in front-end for your Ryu controller.
+
+  Required backend endpoints (same as your previous dashboard):
+
+    GET  /status                  → JSON snapshot { "1": {state,expiry,did,last_seen}, ..., "_edges": [...], "_flows": [...], "_flow_seq": N }
+    GET  /stream                  → SSE feed, same payload as /status, pushed on every change
+    GET  /ping?src=N&dst=M         → SSE feed, each event: { line: "PING …" } or { done: true }
+    POST /quarantine/{id}         → { ok: true | false, msg? }
+    POST /restore/{id}            → { ok: true | false, msg? }
+    POST /reauth/{id}             → { ok: true | false, msg? }
+    POST /reauth                  → { ok: true | false, msg? }    (global, all 22)
+    GET  /demo                    → { active: bool, label?: string }
+    POST /demo/start              → { ok: true | false }
+    POST /demo/stop               → { ok: true | false }
+
+  Drop this file in your /static folder (or wherever your Ryu app serves HTML).
+  React + Babel are loaded from unpkg CDN — replace with local copies if you need offline operation.
+-->
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>SDN Zero Trust · Dashboard</title>
-<script src="/vis-network.min.js"></script>
 <style>
-:root {
-  --bg:      #07090f;
-  --panel:   #0d1117;
-  --panel2:  #111827;
-  --border:  #1c2d45;
-  --auth:    #00e676;
-  --pending: #ffd600;
-  --offline: #ff4444;
-  --text:    #d4d8e0;
-  --muted:   #4b5563;
-  --accent:  #00b4d8;
-  --purple:  #a78bfa;
-}
+  html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; background: #F2F2F7; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", system-ui, sans-serif; color: #1C1C1E; -webkit-font-smoothing: antialiased; }
+  #root { width: 100vw; height: 100vh; }
+  *::-webkit-scrollbar { width: 8px; height: 8px; }
+  *::-webkit-scrollbar-thumb { background: #D1D1D6; border-radius: 4px; border: 2px solid transparent; background-clip: padding-box; }
+  *::-webkit-scrollbar-track { background: transparent; }
 
-* { box-sizing: border-box; margin: 0; padding: 0; }
+  .z-mono { font-family: "SF Mono", "JetBrains Mono", ui-monospace, Menlo, monospace; font-feature-settings: "tnum"; }
+  .z-card { background: #FFFFFF; border-radius: 14px; box-shadow: 0 0 0 0.5px rgba(0,0,0,0.04), 0 1px 3px rgba(0,0,0,0.04), 0 4px 16px rgba(0,0,0,0.04); }
+  .z-btn { font-family: inherit; font-size: 12px; font-weight: 500; padding: 6px 12px; border-radius: 8px; border: none; background: #F8F8FA; color: #1C1C1E; cursor: pointer; transition: all .12s; white-space: nowrap; }
+  .z-btn:hover:not(:disabled) { background: #ECECF0; }
+  .z-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+  .z-btn-primary { background: #007AFF; color: #fff; }
+  .z-btn-primary:hover:not(:disabled) { background: #0064D6; }
+  .z-btn-danger { background: #FFE5E5; color: #FF3B30; }
+  .z-btn-danger:hover:not(:disabled) { background: #FFD5D5; }
+  .z-btn-ghost { background: transparent; color: #6B6B71; }
+  .z-btn-ghost:hover { background: #F8F8FA; color: #1C1C1E; }
+  .z-pill { font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 100px; display: inline-flex; align-items: center; gap: 5px; }
+  .z-h { font-size: 10px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #9A9AA0; }
+  .z-nav-item { display: flex; align-items: center; gap: 10px; padding: 7px 11px; border-radius: 8px; cursor: pointer; transition: background .12s; font-size: 13px; font-weight: 500; color: #1C1C1E; }
+  .z-nav-item:hover { background: #F8F8FA; }
+  .z-nav-item.active { background: #007AFF; color: #fff; }
+  .z-nav-item.active .z-nav-count { color: rgba(255,255,255,.7); }
+  .z-nav-count { font-size: 11px; color: #9A9AA0; margin-left: auto; font-variant-numeric: tabular-nums; }
+  .z-row-sw { display: flex; align-items: center; gap: 10px; padding: 7px 12px; cursor: pointer; transition: background .1s; border-radius: 6px; margin: 0 4px; }
+  .z-row-sw:hover { background: #F8F8FA; }
+  .z-row-sw.sel { background: #E5F0FF; }
+  .z-filter-chip { font-family: inherit; font-size: 11px; font-weight: 500; padding: 4px 10px; border-radius: 100px; border: none; background: transparent; color: #6B6B71; cursor: pointer; transition: all .12s; }
+  .z-filter-chip:hover { background: #F8F8FA; color: #1C1C1E; }
+  .z-filter-chip.on { background: #1C1C1E; color: #fff; }
+  .z-tab-btn { flex: 1; font-family: inherit; font-size: 12px; font-weight: 600; padding: 8px 4px; background: transparent; border: none; cursor: pointer; color: #6B6B71; border-bottom: 2px solid transparent; transition: all .15s; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+  .z-tab-btn:hover { color: #1C1C1E; }
+  .z-tab-btn.active { color: #007AFF; border-bottom-color: #007AFF; }
+  .z-tab-badge { background: #FF3B30; color: #fff; font-size: 9px; font-weight: 700; padding: 1px 6px; border-radius: 100px; }
+  .z-tab-badge.muted { background: #F8F8FA; color: #6B6B71; }
+  @keyframes z-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+  @keyframes z-fade-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+  .z-fade-in { animation: z-fade-in .25s ease; }
+  .z-pulse { animation: z-pulse 1.5s ease-in-out infinite; }
+  .z-demo-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 
-body {
-  background: var(--bg);
-  color: var(--text);
-  font-family: 'Consolas', 'Courier New', monospace;
-  height: 100vh;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  font-size: 13px;
-}
+  /* ── Topbar ────────────────────────────────────────────────────── */
+  .z-topbar { display: flex; align-items: center; gap: 12px; padding: 10px 18px; flex-shrink: 0; border-bottom: 0.5px solid #E5E5EA; background: #FFFFFF; flex-wrap: nowrap; min-height: 56px; }
+  .z-topbar-brand { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+  .z-topbar-logo { width: 32px; height: 32px; border-radius: 9px; background: linear-gradient(135deg, #0A84FF 0%, #5856D6 100%); display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 6px rgba(10,132,255,0.3); flex-shrink: 0; }
+  .z-topbar-name { font-size: 16px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.1; }
+  .z-topbar-sub { font-size: 11px; color: #6B6B71; line-height: 1.1; margin-top: 1px; }
+  .z-topbar-actions { margin-left: auto; display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+  .z-topbar-clock { font-family: "SF Mono", "JetBrains Mono", ui-monospace, Menlo, monospace; font-size: 11px; color: #6B6B71; }
 
-/* ── HEADER ───────────────────────────────────────────── */
-header {
-  background: var(--panel);
-  border-bottom: 1px solid var(--border);
-  padding: 9px 18px;
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  flex-shrink: 0;
-  height: 46px;
-}
+  /* ── Main grid (responsive) ──────────────────────────────────── */
+  .z-main { flex: 1; display: grid; grid-template-columns: 1fr 360px; gap: 14px; padding: 14px; padding-top: 12px; min-height: 0; overflow: hidden; }
+  .z-col-left { display: flex; flex-direction: column; gap: 14px; min-height: 0; min-width: 0; }
+  .z-col-right { display: flex; flex-direction: column; gap: 14px; min-height: 0; }
 
-header h1 {
-  font-size: 13px;
-  color: var(--accent);
-  letter-spacing: 2px;
-  text-transform: uppercase;
-  flex-shrink: 0;
-}
+  /* KPI strip */
+  .z-kpis { display: grid; grid-template-columns: 1.5fr 1fr 1fr 1fr; gap: 12px; flex-shrink: 0; }
 
-.pulse-dot {
-  width: 7px; height: 7px;
-  border-radius: 50%;
-  background: var(--auth);
-  animation: pulse 2s infinite;
-  flex-shrink: 0;
-}
+  /* < 1180px: tighter right column */
+  @media (max-width: 1180px) {
+    .z-main { grid-template-columns: 1fr 320px; gap: 12px; padding: 12px; }
+  }
 
-@keyframes pulse {
-  0%, 100% { opacity: 1; box-shadow: 0 0 4px currentColor; }
-  50%       { opacity: 0.4; box-shadow: none; }
-}
+  /* < 920px: stack the right column below */
+  @media (max-width: 920px) {
+    .z-main { grid-template-columns: 1fr; overflow: auto; }
+    .z-col-left { min-height: 600px; }
+    .z-col-right { min-height: 480px; }
+    .z-kpis { grid-template-columns: repeat(2, 1fr); }
+    .z-kpis > :first-child { grid-column: 1 / -1; }
+    .z-topbar-clock { display: none; }
+    .z-topbar-sub { display: none; }
+  }
 
-.header-stats {
-  display: flex;
-  gap: 24px;
-  margin-left: auto;
-  align-items: center;
-}
+  /* < 600px: phone */
+  @media (max-width: 600px) {
+    .z-topbar { padding: 8px 12px; gap: 8px; min-height: 50px; flex-wrap: wrap; height: auto; }
+    .z-topbar-name { font-size: 14px; }
+    .z-topbar-actions { gap: 6px; }
+    .z-topbar-counts { display: none !important; }
+    .z-main { padding: 8px; gap: 8px; }
+    .z-kpis { grid-template-columns: 1fr 1fr; gap: 8px; }
+    .z-kpis > :first-child { grid-column: 1 / -1; }
+    .z-reauth-long { display: none !important; }
+    .z-reauth-short { display: inline !important; }
+    .z-status-text-long { display: none !important; }
+  }
 
-.stat { display: flex; align-items: center; gap: 7px; font-size: 11px; color: var(--muted); }
-.stat-val { font-weight: bold; font-size: 17px; }
-.stat-auth    .stat-val { color: var(--auth); }
-.stat-pending .stat-val { color: var(--pending); }
-.stat-offline .stat-val { color: var(--offline); }
-
-.clock { color: var(--muted); font-size: 11px; padding-left: 14px; border-left: 1px solid var(--border); }
-
-.btn-reauth-all {
-  padding: 5px 13px;
-  border: 1px solid #1d4ed8;
-  border-radius: 4px;
-  background: #0a1e3b;
-  color: #60a5fa;
-  font-size: 11px;
-  font-family: inherit;
-  cursor: pointer;
-  font-weight: bold;
-  letter-spacing: 0.3px;
-  transition: opacity .15s;
-}
-.btn-reauth-all:hover:not(:disabled) { opacity: .8; }
-.btn-reauth-all:disabled { opacity: .3; cursor: default; }
-
-.btn-demo {
-  padding: 5px 13px;
-  border: 1px solid #166534;
-  border-radius: 4px;
-  background: #0a2515;
-  color: #4ade80;
-  font-size: 11px;
-  font-family: inherit;
-  cursor: pointer;
-  font-weight: bold;
-  letter-spacing: 0.3px;
-  transition: opacity .15s, background .2s, border-color .2s;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.btn-demo:hover { opacity: .85; }
-.btn-demo.active {
-  background: #2a1000;
-  border-color: #7c2d12;
-  color: #fb923c;
-}
-.demo-dot {
-  width: 6px; height: 6px;
-  border-radius: 50%;
-  background: currentColor;
-  flex-shrink: 0;
-  animation: demo-pulse 1s ease-in-out infinite;
-}
-@keyframes demo-pulse {
-  0%, 100% { opacity: 1; }
-  50%       { opacity: .15; }
-}
-.demo-scenario {
-  font-size: 9px;
-  color: var(--muted);
-  max-width: 130px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  align-self: center;
-}
-.btn-reauth { background: #0a1e3b; color: #60a5fa; border: 1px solid #1d4ed8; }
-
-/* ── PING ─────────────────────────────────────────────── */
-#ping-block {
-  border-top: 1px solid var(--border);
-  padding: 9px 14px 11px;
-  flex-shrink: 0;
-}
-
-.ping-title {
-  font-size: 9px;
-  text-transform: uppercase;
-  letter-spacing: 1.5px;
-  color: var(--muted);
-  margin-bottom: 8px;
-}
-
-.ping-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-bottom: 7px;
-}
-
-.ping-lbl { font-size: 10px; color: var(--muted); flex-shrink: 0; }
-.ping-node { font-size: 11px; font-weight: bold; color: var(--purple); flex-shrink: 0; }
-
-.ping-select {
-  flex: 1;
-  background: var(--panel2);
-  border: 1px solid var(--border);
-  color: var(--text);
-  font-size: 11px;
-  font-family: inherit;
-  padding: 3px 6px;
-  border-radius: 3px;
-  min-width: 0;
-}
-
-.btn-ping {
-  padding: 5px 12px;
-  background: #0a2515;
-  border: 1px solid #166534;
-  color: #4ade80;
-  border-radius: 4px;
-  font-size: 12px;
-  cursor: pointer;
-  font-family: inherit;
-  font-weight: bold;
-  flex-shrink: 0;
-  transition: opacity .15s;
-}
-.btn-ping:hover:not(:disabled) { opacity: .8; }
-.btn-ping:disabled { opacity: .3; cursor: default; }
-.btn-ping.running { background: #2a1000; border-color: #7c2d12; color: #f97316; }
-.btn-stop { background: #1a0505; border-color: #7f1d1d; color: #f87171; }
-
-.ping-terminal {
-  background: #020b14;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 6px 9px;
-  font-size: 11px;
-  line-height: 1.75;
-  max-height: 135px;
-  overflow-y: auto;
-  display: none;
-}
-.ping-terminal.visible { display: block; }
-.ping-terminal::-webkit-scrollbar { width: 3px; }
-.ping-terminal::-webkit-scrollbar-thumb { background: var(--border); }
-.p-ok   { color: #00e676; }
-.p-warn { color: #ffd600; }
-.p-fail { color: #ff4444; }
-.p-stat { color: #a78bfa; }
-.p-info { color: var(--muted); }
-
-/* ── MAIN LAYOUT ──────────────────────────────────────── */
-main {
-  display: flex;
-  flex: 1;
-  overflow: hidden;
-}
-
-/* ── GRAPH PANEL ──────────────────────────────────────── */
-#graph-panel {
-  flex: 1;
-  position: relative;
-  border-right: 1px solid var(--border);
-  background: radial-gradient(ellipse at 50% 50%, #0a1020 0%, var(--bg) 70%);
-}
-
-#network { width: 100%; height: 100%; }
-
-.graph-badge {
-  position: absolute;
-  top: 11px; left: 15px;
-  font-size: 10px;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 1.5px;
-  pointer-events: none;
-}
-
-/* ── INFO PANEL ───────────────────────────────────────── */
-#info-panel {
-  width: 330px;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  flex-shrink: 0;
-  background: var(--panel);
-}
-
-/* ── DETAIL BLOCK ─────────────────────────────────────── */
-#detail-block {
-  border-bottom: 1px solid var(--border);
-  padding: 12px 14px;
-  flex-shrink: 0;
-}
-
-.block-title {
-  font-size: 9px;
-  text-transform: uppercase;
-  letter-spacing: 1.5px;
-  color: var(--muted);
-  margin-bottom: 9px;
-}
-
-#detail-content { font-size: 12px; line-height: 1.9; }
-.dl { display: flex; gap: 6px; }
-.dl .lbl { color: var(--muted); flex-shrink: 0; }
-.val-auth    { color: var(--auth);    font-weight: bold; }
-.val-pending { color: var(--pending); font-weight: bold; }
-.val-offline { color: var(--offline); font-weight: bold; }
-.val-did     { color: #fbbf24; font-size: 10px; word-break: break-all; }
-
-.action-btns { display: flex; gap: 8px; margin-top: 10px; }
-.btn {
-  flex: 1;
-  padding: 7px 4px;
-  border: none;
-  border-radius: 5px;
-  font-size: 11px;
-  font-family: inherit;
-  cursor: pointer;
-  font-weight: bold;
-  letter-spacing: 0.3px;
-  transition: opacity .15s, transform .1s;
-}
-.btn:hover:not(:disabled) { opacity: .85; transform: translateY(-1px); }
-.btn:disabled { opacity: .25; cursor: default; }
-.btn-quar    { background: #3b0a0a; color: #fca5a5; border: 1px solid #7f1d1d; }
-.btn-restore { background: #052e16; color: #86efac; border: 1px solid #14532d; }
-
-/* ── SWITCH LIST ──────────────────────────────────────── */
-#list-block {
-  flex: 1;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  border-bottom: 1px solid var(--border);
-}
-
-.block-title-bar {
-  font-size: 9px;
-  text-transform: uppercase;
-  letter-spacing: 1.5px;
-  color: var(--muted);
-  padding: 9px 14px 7px;
-  flex-shrink: 0;
-  border-bottom: 1px solid var(--border);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-#switch-list-scroll {
-  flex: 1;
-  overflow-y: auto;
-  padding: 5px 6px;
-}
-#switch-list-scroll::-webkit-scrollbar { width: 3px; }
-#switch-list-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
-
-.sw-row {
-  display: flex;
-  align-items: center;
-  padding: 6px 8px;
-  border-radius: 5px;
-  cursor: pointer;
-  gap: 9px;
-  transition: background .12s;
-  margin-bottom: 1px;
-  border: 1px solid transparent;
-}
-.sw-row:hover { background: rgba(0,180,216,.07); }
-.sw-row.selected { background: rgba(0,180,216,.12); border-color: rgba(0,180,216,.3); }
-
-.sw-id {
-  font-size: 11px;
-  font-weight: bold;
-  color: var(--purple);
-  width: 26px;
-  flex-shrink: 0;
-}
-
-.sw-dot {
-  width: 7px; height: 7px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-.d-auth    { background: var(--auth);    box-shadow: 0 0 5px var(--auth); }
-.d-pending { background: var(--pending); }
-.d-off     { background: #2d2d2d; }
-
-.sw-meta { flex: 1; min-width: 0; }
-.sw-state { font-size: 11px; }
-.sw-did   { font-size: 10px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px; }
-
-.sw-token { font-size: 11px; text-align: right; flex-shrink: 0; width: 52px; }
-.tk-ok   { color: var(--auth); }
-.tk-warn { color: var(--pending); }
-.tk-crit { color: var(--offline); }
-.tk-none { color: #2d2d2d; }
-
-/* ── EVENTS ───────────────────────────────────────────── */
-#events-block {
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  border-top: 1px solid var(--border);
-  transition: height .2s ease;
-}
-
-.events-title {
-  font-size: 9px;
-  text-transform: uppercase;
-  letter-spacing: 1.5px;
-  color: var(--muted);
-  padding: 8px 14px 7px;
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  cursor: pointer;
-  user-select: none;
-}
-.events-title:hover { color: var(--text); }
-
-.events-chevron {
-  font-size: 10px;
-  transition: transform .2s ease;
-  color: var(--muted);
-}
-#events-block.open .events-chevron { transform: rotate(180deg); }
-
-#events-body {
-  overflow: hidden;
-  max-height: 0;
-  transition: max-height .25s ease;
-}
-#events-block.open #events-body { max-height: 160px; }
-
-#events-list {
-  height: 126px;
-  overflow-y: auto;
-  padding: 3px 10px;
-}
-#events-list::-webkit-scrollbar { width: 3px; }
-#events-list::-webkit-scrollbar-thumb { background: var(--border); }
-
-.ev {
-  padding: 3px 0;
-  border-bottom: 1px solid rgba(255,255,255,.03);
-  display: flex;
-  gap: 7px;
-  align-items: baseline;
-  font-size: 11px;
-}
-.ev-time { color: var(--muted); flex-shrink: 0; font-size: 10px; }
-.ev-icon { flex-shrink: 0; }
-.ev-auth     { color: var(--auth); }
-.ev-quar     { color: var(--offline); }
-.ev-restore  { color: #60a5fa; }
-.ev-expire   { color: var(--pending); }
-.ev-inactive { color: #9ca3af; }
-
-/* ── TABS ─────────────────────────────────────────────── */
-.tab-bar {
-  display: flex;
-  border-bottom: 1px solid var(--border);
-  flex-shrink: 0;
-}
-.tab-btn {
-  flex: 1;
-  padding: 8px 4px;
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-  color: var(--muted);
-  background: none;
-  border: none;
-  border-bottom: 2px solid transparent;
-  cursor: pointer;
-  font-family: inherit;
-  transition: color .15s, border-color .15s;
-}
-.tab-btn:hover { color: var(--text); }
-.tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
-
-.tab-badge {
-  display: inline-block;
-  background: rgba(0,180,216,.25);
-  color: var(--accent);
-  border-radius: 8px;
-  padding: 0 5px;
-  font-size: 9px;
-  font-weight: bold;
-  margin-left: 4px;
-  min-width: 16px;
-  text-align: center;
-  vertical-align: middle;
-}
-.tab-badge.badge-new {
-  background: var(--offline);
-  color: #fff;
-  animation: badge-pop .25s ease;
-}
-@keyframes badge-pop {
-  0%   { transform: scale(1.6); }
-  100% { transform: scale(1); }
-}
-
-/* ── FLUX LIST ────────────────────────────────────────── */
-#flux-list-scroll {
-  flex: 1;
-  overflow-y: auto;
-  padding: 5px 6px;
-  display: none;
-}
-#flux-list-scroll::-webkit-scrollbar { width: 3px; }
-#flux-list-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
-
-.flux-src { color: var(--auth); font-weight: bold; }
-.flux-sep { color: var(--muted); }
-.flux-dst { color: #60a5fa; font-weight: bold; }
-
-.flux-route-block {
-  padding: 9px 11px 10px;
-  margin-bottom: 7px;
-  background: rgba(0,180,216,.04);
-  border: 1px solid rgba(0,180,216,.13);
-  border-radius: 7px;
-  animation: flux-in .3s ease;
-}
-@keyframes flux-in {
-  from { opacity: 0; transform: translateY(-4px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-
-.flux-route-header {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  margin-bottom: 8px;
-}
-.flux-dir-label {
-  font-size: 9px;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-  color: var(--muted);
-  flex-shrink: 0;
-  width: 48px;
-}
-.flux-ips-label { flex: 1; font-size: 11px; }
-.flux-hops-badge {
-  font-size: 9px;
-  background: rgba(0,180,216,.18);
-  color: var(--accent);
-  border-radius: 8px;
-  padding: 2px 7px;
-  font-weight: bold;
-  flex-shrink: 0;
-}
-
-.flux-path {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-.flux-path-node {
-  background: rgba(139,92,246,.13);
-  border: 1px solid rgba(139,92,246,.32);
-  color: var(--purple);
-  border-radius: 4px;
-  padding: 3px 8px;
-  font-size: 11px;
-  font-weight: bold;
-}
-.flux-path-arrow { color: var(--muted); font-size: 9px; }
-
-.flux-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 130px;
-  color: var(--muted);
-  font-size: 11px;
-  gap: 9px;
-  text-align: center;
-}
-.flux-empty-icon { font-size: 28px; opacity: .25; }
-
-/* ── TOAST ────────────────────────────────────────────── */
-#toast {
-  position: fixed;
-  bottom: 18px; right: 18px;
-  background: var(--panel2);
-  border: 1px solid var(--border);
-  color: var(--text);
-  padding: 9px 16px;
-  border-radius: 6px;
-  font-size: 12px;
-  opacity: 0;
-  transition: opacity .3s;
-  pointer-events: none;
-  z-index: 100;
-}
-#toast.show { opacity: 1; }
+  /* < 760px: hide non-essential topbar info */
+  @media (max-width: 760px) {
+    .z-topbar-counts { display: none !important; }
+    .z-topbar-sub { display: none; }
+  }
 </style>
 </head>
 <body>
+<div id="root"></div>
 
-<header>
-  <div class="pulse-dot" id="status-dot"></div>
-  <h1>SDN Zero Trust &nbsp;·&nbsp; Dashboard</h1>
-  <div class="header-stats">
-    <div class="stat stat-auth">
-      <span>Authentifiés</span>
-      <span class="stat-val" id="stat-auth">—</span>
-    </div>
-    <div class="stat stat-pending">
-      <span>En attente</span>
-      <span class="stat-val" id="stat-pending">—</span>
-    </div>
-    <div class="stat stat-offline">
-      <span>Hors ligne</span>
-      <span class="stat-val" id="stat-offline">—</span>
-    </div>
-    <button class="btn-reauth-all" id="btn-reauth-all" onclick="doReauthAll()">🔐 Re-auth tout</button>
-    <button class="btn-demo" id="btn-demo" onclick="toggleDemo()">▶ Mode Démo</button>
-    <span class="demo-scenario" id="demo-scenario" style="display:none"></span>
-    <div class="clock" id="clock"></div>
-  </div>
-</header>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
 
-<main>
-  <div id="graph-panel">
-    <div class="graph-badge">Topologie réseau</div>
-    <div id="network"></div>
-  </div>
-
-  <div id="info-panel">
-
-    <!-- Détail switch sélectionné -->
-    <div id="detail-block">
-      <div class="block-title">Switch sélectionné</div>
-      <div id="detail-content" style="color:var(--muted)">
-        Cliquez sur un switch dans le graphe ou la liste.
-      </div>
-      <div id="ping-block" style="display:none">
-        <div class="ping-title">Ping</div>
-        <div class="ping-row">
-          <span class="ping-lbl">De</span>
-          <span id="ping-src" class="ping-node">—</span>
-          <span class="ping-lbl">vers</span>
-          <select id="ping-dst" class="ping-select"></select>
-          <button id="ping-btn"  class="btn-ping" onclick="launchPing()">▶ Ping</button>
-          <button id="ping-stop" class="btn-ping btn-stop" onclick="stopPing()" disabled>■ Stop</button>
-        </div>
-        <div id="ping-terminal" class="ping-terminal"></div>
-      </div>
-    </div>
-
-    <!-- Liste switches / Flux — onglets -->
-    <div id="list-block">
-      <div class="tab-bar">
-        <button class="tab-btn active" id="tab-switches" onclick="switchTab('switches')">
-          Switches <span class="tab-badge" id="badge-switches">22</span>
-        </button>
-        <button class="tab-btn" id="tab-flux" onclick="switchTab('flux')">
-          Flux réseau <span class="tab-badge" id="badge-flux">0</span>
-        </button>
-      </div>
-      <div id="switch-list-scroll">
-        <div id="switch-list"></div>
-      </div>
-      <div id="flux-list-scroll">
-        <div id="flux-list"></div>
-      </div>
-    </div>
-
-    <!-- Journal -->
-    <div id="events-block">
-      <div class="events-title" onclick="toggleEvents()">
-        <span>Journal d'événements <span id="events-badge" style="color:var(--accent)"></span></span>
-        <span class="events-chevron">▲</span>
-      </div>
-      <div id="events-body">
-        <div id="events-list"></div>
-      </div>
-    </div>
-
-  </div>
-</main>
-
-<div id="toast"></div>
-
+<!-- ════════════════════════════════════════════════════════════════
+     Topology — node positions (mirror topo_projet.py)
+════════════════════════════════════════════════════════════════ -->
 <script>
-// ================================================================
-// Global state
-// ================================================================
-let status = {};
-let prevStatus = {};
-let selectedId = null;
-let network = null;
-let nodesDS = null;
-let edgesDS = null;
-let edgesBuilt = false;
-const eventLog = [];
-
-// Flux
-let activeTab = 'switches';
-let newFluxCount = 0;
-let lastFlowSeq = 0;
-let currentPingFlows = [];
-let pingFlowsFrozen  = false;  // true once the path is captured for the current ping
-const flashTimers = {};
-const routeTimers = {};
-
-// ================================================================
-// Utilities
-// ================================================================
-const $ = id => document.getElementById(id);
-const nowSec = () => Date.now() / 1000;
-
-function fmtDur(s) {
-  s = Math.max(0, Math.floor(s));
-  return `${Math.floor(s / 60)}m${String(s % 60).padStart(2, '0')}s`;
-}
-
-function tokenClass(rem) {
-  if (rem <= 0)  return 'tk-crit';
-  if (rem < 30)  return 'tk-crit';
-  if (rem < 60)  return 'tk-warn';
-  return 'tk-ok';
-}
-
-function stateHTML(state) {
-  if (state === 'auth')      return '<span class="val-auth">AUTH OK</span>';
-  if (state === 'connected') return '<span class="val-pending">EN ATTENTE</span>';
-  return '<span class="val-offline">HORS LIGNE</span>';
-}
-
-function toast(msg) {
-  const el = $('toast');
-  el.textContent = msg;
-  el.classList.add('show');
-  setTimeout(() => el.classList.remove('show'), 2800);
-}
-
-// ================================================================
-// Tabs
-// ================================================================
-
-function switchTab(tab) {
-  activeTab = tab;
-  $('tab-switches').classList.toggle('active', tab === 'switches');
-  $('tab-flux').classList.toggle('active', tab === 'flux');
-  $('switch-list-scroll').style.display = tab === 'switches' ? 'block' : 'none';
-  $('flux-list-scroll').style.display   = tab === 'flux'     ? 'block' : 'none';
-  if (tab === 'flux') {
-    newFluxCount = 0;
-    updateFluxBadge();
-  }
-}
-
-function updateFluxBadge() {
-  const badge = $('badge-flux');
-  const total = (status._flows || []).length;
-  badge.textContent = newFluxCount > 0 ? `+${newFluxCount}` : total;
-  badge.className = 'tab-badge' + (newFluxCount > 0 ? ' badge-new' : '');
-}
-
-// ================================================================
-// Flash node (when a flow traverses it)
-// ================================================================
-function flashNode(dpid, duration = 900) {
-  if (flashTimers[dpid]) clearTimeout(flashTimers[dpid]);
-  nodesDS.update({
-    id: dpid,
-    color: { background:'#001e3c', border:'#00b4d8', highlight:{ background:'#002952', border:'#33ccff' } },
-    shadow: { enabled:true, color:'rgba(0,180,216,.6)', size:18, x:0, y:0 },
-  });
-  flashTimers[dpid] = setTimeout(() => {
-    const info  = status[String(dpid)] || { state:'unknown' };
-    const state = info.state || 'unknown';
-    nodesDS.update({
-      id: dpid,
-      color: nodeColor(state),
-      shadow: state === 'auth'
-        ? { enabled:true, color:'rgba(0,230,118,.25)', size:12, x:0, y:0 }
-        : false,
-    });
-    delete flashTimers[dpid];
-  }, duration);
-}
-
-// ================================================================
-// BFS on authenticated switches (same logic as Ryu Dijkstra)
-// ================================================================
-function bfsPath(srcDpid, dstDpid) {
-  // Subgraph: only authenticated switches
-  const auth = new Set();
-  for (let i = 1; i <= 22; i++) {
-    if ((status[String(i)] || {}).state === 'auth') auth.add(i);
-  }
-  if (!auth.has(srcDpid) || !auth.has(dstDpid)) return [];
-
-  // Adjacency list from edgesDS (undirected)
-  const adj = new Map();
-  edgesDS.get().forEach(e => {
-    if (!adj.has(e.from)) adj.set(e.from, []);
-    if (!adj.has(e.to))   adj.set(e.to,   []);
-    adj.get(e.from).push(e.to);
-    adj.get(e.to).push(e.from);
-  });
-
-  // BFS
-  const visited = new Set([srcDpid]);
-  const queue   = [[srcDpid, [srcDpid]]];
-  while (queue.length) {
-    const [node, path] = queue.shift();
-    if (node === dstDpid) return path;
-    for (const nb of (adj.get(node) || [])) {
-      if (!visited.has(nb) && auth.has(nb)) {
-        visited.add(nb);
-        queue.push([nb, [...path, nb]]);
-      }
-    }
-  }
-  return [];
-}
-
-// ================================================================
-// Full route highlight (BFS + edges + nodes)
-// ================================================================
-function highlightRoute(srcIp, dstIp) {
-  // In this topology hX is connected to sX → 10.0.0.X gives dpid X
-  const srcDpid = parseInt(srcIp.split('.')[3]);
-  const dstDpid = parseInt(dstIp.split('.')[3]);
-
-  const path = bfsPath(srcDpid, dstDpid);
-  if (path.length < 2) return;
-
-  const routeKey = path.join('-');
-  if (routeTimers[routeKey]) clearTimeout(routeTimers[routeKey]);
-
-  // Flash de tous les nœuds du chemin
-  path.forEach(d => flashNode(d, 2500));
-
-  // Find consecutive edges along the path
-  const routeEdges = [];
-  for (let i = 0; i < path.length - 1; i++) {
-    const a = path[i], b = path[i + 1];
-    const edge = edgesDS.get().find(e =>
-      (e.from === a && e.to === b) || (e.from === b && e.to === a)
-    );
-    if (edge) routeEdges.push(edge);
-  }
-  if (!routeEdges.length) return;
-
-  // Illuminer en cyan vif
-  edgesDS.update(routeEdges.map(e => ({ id: e.id, color: '#00b4d8', width: 4 })));
-  network.redraw();
-
-  // Restore after 2.5 seconds
-  routeTimers[routeKey] = setTimeout(() => {
-    edgesDS.update(routeEdges.map(e => ({ id: e.id, color: '#1c2d45', width: 1.5 })));
-    network.redraw();
-    delete routeTimers[routeKey];
-  }, 2500);
-}
-
-// ================================================================
-// Flow rendering — horizontal path view per route
-// ================================================================
-function renderFluxList() {
-  if (!currentPingFlows.length) {
-    $('flux-list').innerHTML = `
-      <div class="flux-empty">
-        <div class="flux-empty-icon">⟶</div>
-        <div>Lancez un ping pour visualiser les routes</div>
-      </div>`;
-    return;
-  }
-
-  // Group by direction src→dst
-  const groups = new Map();
-  currentPingFlows.forEach(f => {
-    const key = `${f.src}→${f.dst}`;
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key).push(f);
-  });
-
-  // Detect forward/return pairs
-  const keys = [...groups.keys()];
-
-  let html = '';
-  groups.forEach((flows, route) => {
-    const [srcIP, dstIP] = route.split('→');
-    const reverseKey = `${dstIP}→${srcIP}`;
-    const hasPair = groups.has(reverseKey);
-
-    let dirLabel = '';
-    if (hasPair) {
-      const srcNum = parseInt(srcIP.split('.')[3]);
-      const dstNum = parseInt(dstIP.split('.')[3]);
-      dirLabel = srcNum < dstNum ? '→ Aller' : '← Retour';
-    }
-
-    const hops = flows.length;
-
-    html += `<div class="flux-route-block">`;
-
-    // Header: direction + IPs + hops badge
-    html += `<div class="flux-route-header">`;
-    if (dirLabel) {
-      html += `<span class="flux-dir-label">${dirLabel}</span>`;
-    }
-    html += `<span class="flux-ips-label">
-      <span class="flux-src">${srcIP}</span>
-      <span class="flux-sep"> ──▶ </span>
-      <span class="flux-dst">${dstIP}</span>
-    </span>`;
-    html += `<span class="flux-hops-badge">${hops} hop${hops > 1 ? 's' : ''}</span>`;
-    html += `</div>`;
-
-    // Chemin horizontal
-    html += `<div class="flux-path">`;
-    flows.forEach((f, idx) => {
-      html += `<span class="flux-path-node">s${f.dpid}</span>`;
-      if (idx < flows.length - 1) {
-        html += `<span class="flux-path-arrow">▶</span>`;
-      }
-    });
-    html += `</div>`;
-
-    html += `</div>`;
-  });
-
-  $('flux-list').innerHTML = html;
-}
-
-// ================================================================
-// Event log — toggle
-// ================================================================
-let eventsOpen = false;
-let unreadEvents = 0;
-
-function toggleEvents() {
-  eventsOpen = !eventsOpen;
-  const block = $('events-block');
-  block.classList.toggle('open', eventsOpen);
-  if (eventsOpen) {
-    unreadEvents = 0;
-    $('events-badge').textContent = '';
-  }
-}
-
-function addEvent(type, text) {
-  const t = new Date().toLocaleTimeString('fr-FR', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
-  const icons = { auth:'✅', quar:'🔴', restore:'🔵', expire:'⏰', inactive:'💤' };
-  eventLog.unshift({ time: t, icon: icons[type] || '·', text, type });
-  if (eventLog.length > 60) eventLog.pop();
-  if (!eventsOpen) {
-    unreadEvents++;
-    $('events-badge').textContent = `· ${unreadEvents}`;
-  }
-  renderEvents();
-}
-
-function renderEvents() {
-  $('events-list').innerHTML = eventLog.slice(0, 25).map(e =>
-    `<div class="ev">
-      <span class="ev-time">${e.time}</span>
-      <span class="ev-icon">${e.icon}</span>
-      <span class="ev-${e.type}">${e.text}</span>
-    </div>`
-  ).join('');
-}
-
-// ================================================================
-// vis-network — static positions (S1 at center)
-// ================================================================
-
-// Fixed positions mirroring the topo_projet.py topology
-const NODE_POSITIONS = {
-  1:  { x:    0, y:    0 },  // Center — main hub
-
-  // Branche haut
+const POSITIONS = {
+  1:  { x:    0, y:    0 },
   5:  { x:    0, y: -210 },
   4:  { x: -110, y: -260 },
   2:  { x: -220, y: -175 },
   3:  { x: -345, y: -235 },
-
-  // Branche haut-droite
   6:  { x:  135, y: -205 },
   7:  { x:  270, y: -100 },
   8:  { x:  385, y: -170 },
-
-  // Branche droite
   9:  { x:  265, y:   80 },
   10: { x:  385, y:   80 },
-
-  // Branche bas-droite
   11: { x:  125, y:  225 },
   12: { x:  245, y:  295 },
   13: { x:  145, y:  345 },
   14: { x:   15, y:  315 },
   15: { x:   15, y:  425 },
   16: { x:   15, y:  535 },
-
-  // Branche bas-gauche
   17: { x: -130, y:  225 },
   18: { x: -250, y:  295 },
   19: { x: -245, y:  155 },
-
-  // Branche gauche
   20: { x: -275, y:   40 },
-
-  // Far-Top-Left branch
   21: { x: -195, y:  -90 },
   22: { x: -315, y: -155 },
 };
+const SWITCH_COUNT = 22;
+</script>
 
-function initNetwork() {
-  nodesDS = new vis.DataSet();
-  edgesDS = new vis.DataSet();
-
-  for (let i = 1; i <= 22; i++) {
-    const pos = NODE_POSITIONS[i] || { x: 0, y: 0 };
-    nodesDS.add({
-      id: i,
-      label: `s${i}`,
-      x: pos.x,
-      y: pos.y,
-      color: nodeColor('unknown'),
-      font: { color: '#8a9bb0', size: 11, face: 'Consolas, Monaco, monospace' },
-      size: i === 1 ? 22 : 16,   // S1 slightly larger
-      borderWidth: i === 1 ? 3 : 2,
-      shadow: false,
-    });
-  }
-
-  network = new vis.Network(
-    $('network'),
-    { nodes: nodesDS, edges: edgesDS },
-    {
-      physics: { enabled: false },  // Positions frozen after layout
-      edges: {
-        color: { color: '#1c2d45', highlight: '#00b4d8', opacity: 0.8 },
-        width: 1.5,
-        smooth: { enabled: false },
-        hoverWidth: 3,
-      },
-      nodes: { shape: 'dot' },
-      interaction: { hover: true, tooltipDelay: 150, dragNodes: true },
-    }
-  );
-
-  network.on('click', params => {
-    if (params.nodes.length) selectSwitch(params.nodes[0]);
-    else deselectSwitch();
-  });
-}
-
-function nodeColor(state) {
-  if (state === 'auth')
-    return { background:'#011c0a', border:'#00e676', highlight:{ background:'#022b10', border:'#33ff8e' } };
-  if (state === 'connected')
-    return { background:'#1a1500', border:'#ffd600', highlight:{ background:'#261f00', border:'#ffe033' } };
-  return { background:'#0d1117', border:'#1c2d45', highlight:{ background:'#111827', border:'#374151' } };
-}
-
-// ================================================================
-// Graph update
-// ================================================================
-function updateNetwork(newStatus) {
-  const t = nowSec();
-  const updates = [];
-
-  for (let i = 1; i <= 22; i++) {
-    const info  = newStatus[String(i)] || { state: 'unknown' };
-    const state = info.state || 'unknown';
-    const color = nodeColor(state);
-
-    let title = `<b style="color:#a78bfa">s${i}</b>&nbsp; ${state.toUpperCase()}`;
-    if (state === 'auth') {
-      const rem  = (info.expiry || 0) - t;
-      const idle = Math.floor(t - (info.last_seen || t));
-      title += `<br>Token : ${fmtDur(rem)}<br>Idle : ${idle}s`;
-      if (info.did) title += `<br><span style="color:#fbbf24;font-size:10px">${info.did}</span>`;
-    }
-
-    updates.push({
-      id: i,
-      color,
-      title,
-      font: { color: state === 'auth' ? '#e0e0e0' : '#4b5563' },
-      size: state === 'auth' ? 20 : 14,
-      shadow: state === 'auth'
-        ? { enabled: true, color: 'rgba(0,230,118,.25)', size: 12, x: 0, y: 0 }
-        : false,
-      borderWidth: state === 'auth' ? 2.5 : 1.5,
-    });
-  }
-  nodesDS.update(updates);
-
-  // Build edges only once
-  if (!edgesBuilt && newStatus._edges && newStatus._edges.length > 0) {
-    const seen = new Set();
-    const toAdd = [];
-    for (const [src, dst] of newStatus._edges) {
-      const key = `${Math.min(src, dst)}-${Math.max(src, dst)}`;
-      if (!seen.has(key)) {
-        seen.add(key);
-        toAdd.push({ from: src, to: dst });
-      }
-    }
-    edgesDS.add(toAdd);
-    edgesBuilt = true;
-  }
-}
-
-// ================================================================
-// Header stats
-// ================================================================
-function updateStats(newStatus) {
-  let nAuth = 0, nPend = 0, nOff = 0;
-  for (let i = 1; i <= 22; i++) {
-    const s = (newStatus[String(i)] || {}).state || 'unknown';
-    if (s === 'auth')      nAuth++;
-    else if (s === 'connected') nPend++;
-    else nOff++;
-  }
-  $('stat-auth').textContent    = nAuth;
-  $('stat-pending').textContent = nPend;
-  $('stat-offline').textContent = nOff;
-
-  const dot = $('status-dot');
-  dot.style.background = nAuth > 0 ? 'var(--auth)' : 'var(--offline)';
-  dot.style.color      = nAuth > 0 ? 'var(--auth)' : 'var(--offline)';
-}
-
-// ================================================================
-// State change detection
-// ================================================================
-function detectChanges(newStatus) {
-  for (let i = 1; i <= 22; i++) {
-    const k    = String(i);
-    const cur  = (newStatus[k]  || { state: 'unknown' }).state;
-    const prev = (prevStatus[k] || { state: 'unknown' }).state;
-    if (cur === prev) continue;
-
-    if (cur === 'auth') {
-      const did = (newStatus[k].did || '').split(':').slice(2).join(':');
-      addEvent('auth', `s${i} authentifié — ${did}`);
-    } else if (prev === 'auth' && cur === 'connected') {
-      addEvent('expire', `s${i} token expiré / mis en quarantaine`);
-    } else if (prev === 'auth' && cur === 'unknown') {
-      addEvent('inactive', `s${i} perdu (inactivité ou déconnexion)`);
-    }
-  }
-}
-
-// ================================================================
-// Switch list
-// ================================================================
-function renderSwitchList() {
-  const t = nowSec();
-  let html = '';
-
-  for (let i = 1; i <= 22; i++) {
-    const info  = status[String(i)] || { state: 'unknown' };
-    const state = info.state || 'unknown';
-    const sel   = selectedId === i;
-
-    let dotCls  = 'd-off';
-    let stateTxt = 'Hors ligne';
-    let tokenHtml = '<span class="tk-none">———</span>';
-    let didTxt  = '';
-
-    if (state === 'auth') {
-      dotCls   = 'd-auth';
-      stateTxt = 'Auth OK';
-      const rem = (info.expiry || 0) - t;
-      tokenHtml = `<span class="${tokenClass(rem)}">${fmtDur(rem)}</span>`;
-      if (info.did) {
-        const parts = info.did.split(':');
-        didTxt = parts.slice(2).join(':');
-      }
-    } else if (state === 'connected') {
-      dotCls   = 'd-pending';
-      stateTxt = 'En attente';
-    }
-
-    html += `
-      <div class="sw-row${sel ? ' selected' : ''}" onclick="selectSwitch(${i})">
-        <span class="sw-id">s${i}</span>
-        <div class="sw-dot ${dotCls}"></div>
-        <div class="sw-meta">
-          <div class="sw-state">${stateTxt}</div>
-          ${didTxt ? `<div class="sw-did">${didTxt}</div>` : ''}
-        </div>
-        <div class="sw-token">${tokenHtml}</div>
-      </div>`;
-  }
-
-  $('switch-list').innerHTML = html;
-}
-
-// ================================================================
-// Switch detail
-// ================================================================
-function selectSwitch(id) {
-  selectedId = id;
-  network.selectNodes([id]);
-  renderSwitchList();
-  renderDetail();
-  updatePingBlock(id);
-  // Cancel any running ping when switching selection
-  if (pingES) { pingES.close(); pingES = null; }
-  _resetPingButtons();
-}
-
-function deselectSwitch() {
-  selectedId = null;
-  renderSwitchList();
-  $('detail-content').innerHTML = '<span style="color:var(--muted)">Cliquez sur un switch dans le graphe ou la liste.</span>';
-  updatePingBlock(null);
-}
-
-function renderDetail() {
-  if (!selectedId) return;
-  const id   = selectedId;
-  const info = status[String(id)] || { state: 'unknown' };
-  const state = info.state || 'unknown';
-  const t = nowSec();
-
-  let html = `
-    <div class="dl"><span class="lbl">Switch :</span> <b style="color:var(--purple)">s${id}</b></div>
-    <div class="dl"><span class="lbl">État :</span> ${stateHTML(state)}</div>`;
-
-  if (state === 'auth') {
-    const rem     = Math.max(0, (info.expiry || 0) - t);
-    const idle    = Math.floor(t - (info.last_seen || t));
-    const expTime = info.expiry
-      ? new Date(info.expiry * 1000).toLocaleTimeString('fr-FR')
-      : '—';
-    html += `
-    <div class="dl"><span class="lbl">Token :</span> <span class="${tokenClass(rem)}">${fmtDur(rem)}</span> (expire ${expTime})</div>
-    <div class="dl"><span class="lbl">Idle :</span> ${idle}s</div>`;
-    if (info.did)
-      html += `<div class="dl"><span class="lbl">DID :</span></div><div class="val-did">${info.did}</div>`;
-  } else if (state === 'connected') {
-    html += `<div style="color:var(--muted);font-size:11px;margin-top:5px">Connecté au contrôleur, authentification DID en attente.</div>`;
-  } else {
-    html += `<div style="color:var(--muted);font-size:11px;margin-top:5px">Switch non connecté au contrôleur.</div>`;
-  }
-
-  const canQuar    = state === 'auth';
-  const canRestore = state !== 'auth';
-  const canReauth  = state === 'auth' || state === 'connected';
-
-  html += `
-    <div class="action-btns">
-      <button class="btn btn-quar"    onclick="doQuarantine(${id})" ${canQuar    ? '' : 'disabled'}>🔴 Quarantaine</button>
-      <button class="btn btn-restore" onclick="doRestore(${id})"    ${canRestore ? '' : 'disabled'}>🟢 Restaurer</button>
-      <button class="btn btn-reauth"  onclick="doReauth(${id})"     ${canReauth  ? '' : 'disabled'}>🔐 Re-auth</button>
-    </div>`;
-
-  $('detail-content').innerHTML = html;
-}
-
-// ================================================================
-// Quarantine / restore actions
-// ================================================================
-async function doQuarantine(id) {
-  try {
-    const r = await fetch(`/quarantine/${id}`, { method: 'POST' });
-    const d = await r.json();
-    if (d.ok) {
-      addEvent('quar', `s${id} mis en quarantaine via dashboard`);
-      toast(`s${id} mis en quarantaine`);
-    } else {
-      toast(`Erreur : ${d.msg || 'commande échouée'}`);
-    }
-  } catch (e) {
-    toast('Connexion au serveur perdue');
-  }
-}
-
-// ================================================================
-// Ping
-// ================================================================
-
-let pingES = null;
-
-function updatePingBlock(id) {
-  const block = $('ping-block');
-  if (!id) { block.style.display = 'none'; return; }
-  block.style.display = 'block';
-  $('ping-src').textContent = `s${id}`;
-
-  const sel  = $('ping-dst');
-  const prev = parseInt(sel.value) || 0;
-  sel.innerHTML = '';
-  for (let i = 1; i <= 22; i++) {
-    if (i === id) continue;
-    const opt = document.createElement('option');
-    opt.value = i;
-    opt.textContent = `s${i}  (10.0.0.${i})`;
-    if (i === prev) opt.selected = true;
-    sel.appendChild(opt);
-  }
-}
-
-function colorPingLine(line) {
-  const e = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  const l = e(line);
-  if (!line || line.startsWith('PING '))
-    return `<span class="p-info">${l}</span>`;
-  if (line.includes('bytes from') && line.includes('time=')) {
-    const m = line.match(/time=([\d.]+)/);
-    const rtt = m ? parseFloat(m[1]) : 0;
-    const cls = rtt > 50 ? 'p-warn' : 'p-ok';
-    const hi  = l.replace(/time=[\d.]+ ms/, t => `<b>${t}</b>`);
-    return `<span class="${cls}">${hi}</span>`;
-  }
-  if (line.includes('timeout') || line.includes('nreachable'))
-    return `<span class="p-fail">${l}</span>`;
-  if (line.includes('100% packet loss'))
-    return `<span class="p-fail">${l}</span>`;
-  if (line.includes('packet loss') || line.startsWith('rtt '))
-    return `<span class="p-stat">${l}</span>`;
-  if (line.includes('statistics'))
-    return `<span class="p-info">${l}</span>`;
-  return `<span class="p-info">${l}</span>`;
-}
-
-function _resetPingButtons() {
-  const btn  = $('ping-btn');
-  const stop = $('ping-stop');
-  if (btn)  { btn.disabled = false; btn.classList.remove('running'); btn.textContent = '▶ Ping'; }
-  if (stop) { stop.disabled = true; }
-}
-
-function stopPing() {
-  if (pingES) { pingES.close(); pingES = null; }
-  _resetPingButtons();
-  const term = $('ping-terminal');
-  if (term) {
-    const row = document.createElement('div');
-    row.innerHTML = '<span class="p-info">— ping arrêté —</span>';
-    term.appendChild(row);
-    term.scrollTop = term.scrollHeight;
-  }
-  // Clear the frozen path
-  currentPingFlows = [];
-  pingFlowsFrozen  = false;
-  renderFluxList();
-}
-
-function launchPing() {
-  if (!selectedId) return;
-  const src = selectedId;
-  const dst = parseInt($('ping-dst').value);
-  if (!dst) return;
-
-  if (pingES) { pingES.close(); pingES = null; }
-
-  // Reset the frozen path from the previous ping
-  currentPingFlows = [];
-  pingFlowsFrozen  = false;
-  renderFluxList();
-
-  const btn  = $('ping-btn');
-  const stop = $('ping-stop');
-  const term = $('ping-terminal');
-
-  // Zero Trust check: src and dst must both be authenticated
-  const srcState = (status[String(src)] || {}).state || 'unknown';
-  const dstState = (status[String(dst)] || {}).state || 'unknown';
-  if (srcState !== 'auth' || dstState !== 'auth') {
-    term.innerHTML = '';
-    term.classList.add('visible');
-    const row = document.createElement('div');
-    let reason = '';
-    if (srcState !== 'auth' && dstState !== 'auth') {
-      reason = `s${src} et s${dst} ne sont pas authentifiés`;
-    } else if (srcState !== 'auth') {
-      const label = srcState === 'connected' ? 'en attente d\'authentification' : 'hors ligne / en quarantaine';
-      reason = `s${src} est ${label}`;
-    } else {
-      const label = dstState === 'connected' ? 'en attente d\'authentification' : 'hors ligne / en quarantaine';
-      reason = `s${dst} est ${label}`;
-    }
-    row.innerHTML = `<span class="p-fail">⛔ Communication impossible — ${reason}</span>`;
-    term.appendChild(row);
-    return;
-  }
-
-  btn.disabled = true;
-  btn.classList.add('running');
-  btn.textContent = '⏳';
-  stop.disabled = false;
-  term.innerHTML = '';
-  term.classList.add('visible');
-
-  const header = document.createElement('div');
-  header.innerHTML = `<span class="p-info">▶ ping s${src} → s${dst} (10.0.0.${dst}) continu</span>`;
-  term.appendChild(header);
-
-  pingES = new EventSource(`/ping?src=${src}&dst=${dst}`);
-
-  pingES.onmessage = e => {
-    try {
-      const d = JSON.parse(e.data);
-      if (d.done) {
-        pingES.close(); pingES = null;
-        _resetPingButtons();
-        return;
-      }
-      const row = document.createElement('div');
-      row.innerHTML = colorPingLine(d.line);
-      term.appendChild(row);
-      term.scrollTop = term.scrollHeight;
-    } catch (_) {}
+<!-- ════════════════════════════════════════════════════════════════
+     ZLive — backend integration (SSE /stream, /ping, fetch actions)
+     Replaces the simulator. Same API surface as the dev version.
+════════════════════════════════════════════════════════════════ -->
+<script>
+(function () {
+  const state = {
+    switches: {},      // { 1: { id, state, expiry, did, last_seen }, ... }
+    edges: [],         // [[a,b], ...] from _edges
+    events: [],        // [{ time, age, type, sw, text }, ...]
+    flows: [],         // last batch of new flows captured during current ping
+    flowSeq: 0,
+    pingFrozen: false, // true while a user-initiated ping is running
+    ping: { active: false, src: null, dst: null, lines: [], error: null, path: null, seq: 0 },
+    demo: { active: false, scenario: '' },
+    online: false,
   };
 
-  pingES.onerror = () => {
+  const subs = new Set();
+  const snapshot = () => ({
+    switches: state.switches,
+    edges: state.edges,
+    events: state.events,
+    flows: state.flows,
+    ping: { ...state.ping, lines: [...state.ping.lines] },
+    demo: { ...state.demo },
+    online: state.online,
+    counts: countStates(),
+  });
+  const emit = () => subs.forEach(fn => fn(snapshot()));
+
+  function countStates() {
+    let a = 0, p = 0, o = 0;
+    for (let i = 1; i <= SWITCH_COUNT; i++) {
+      const s = state.switches[i]?.state || 'unknown';
+      if (s === 'auth') a++; else if (s === 'connected') p++; else o++;
+    }
+    return { auth: a, pending: p, offline: o, total: SWITCH_COUNT };
+  }
+
+  // ── Events log ────────────────────────────────────────────────
+  function addEvent(type, sw, text) {
+    state.events.unshift({
+      time: new Date().toLocaleTimeString('fr-FR', { hour12: false }),
+      age: 0, type, sw, text,
+    });
+    if (state.events.length > 100) state.events.pop();
+  }
+
+  // tick: age events every second
+  setInterval(() => {
+    state.events.forEach(e => { e.age = (e.age || 0) + 1; });
+    emit();
+  }, 1000);
+
+  // ── State diff for events ────────────────────────────────────
+  let prevStates = {};
+  function detectChanges(newSwitches) {
+    for (let i = 1; i <= SWITCH_COUNT; i++) {
+      const k = String(i);
+      const cur = (newSwitches[k] || {}).state || 'unknown';
+      const prev = (prevStates[k] || {}).state || 'unknown';
+      if (cur === prev) continue;
+      if (cur === 'auth') {
+        const did = (newSwitches[k].did || '').split(':').slice(2).join(':');
+        addEvent('auth', i, `s${i} authentifié${did ? ` — ${did.slice(0, 20)}…` : ''}`);
+      } else if (prev === 'auth' && cur === 'connected') {
+        addEvent('expire', i, `s${i} token expiré, retombé en attente`);
+      } else if (prev === 'auth' && cur === 'unknown') {
+        addEvent('inactive', i, `s${i} perdu (inactivité ou déconnexion)`);
+      } else if (cur === 'connected' && prev === 'unknown') {
+        addEvent('restore', i, `s${i} reconnecté au contrôleur`);
+      }
+    }
+  }
+
+  // ── SSE /stream ──────────────────────────────────────────────
+  let sse = null;
+  function connectStream() {
+    sse = new EventSource('/stream');
+    sse.onmessage = (e) => {
+      try {
+        const d = JSON.parse(e.data);
+        applyStatus(d);
+        state.online = true;
+      } catch (err) { console.warn('stream parse', err); }
+    };
+    sse.onerror = () => {
+      state.online = false;
+      emit();
+      if (sse) { sse.close(); sse = null; }
+      setTimeout(connectStream, 3000);
+    };
+  }
+
+  function applyStatus(data) {
+    // Build switches map from numeric keys
+    const next = {};
+    Object.entries(data).forEach(([k, v]) => {
+      if (k.startsWith('_')) return;
+      next[k] = { ...v, id: parseInt(k) };
+    });
+    detectChanges(next);
+    state.switches = next;
+    if (data._edges && data._edges.length) state.edges = data._edges;
+
+    // New flows tracking (for Flux tab path display)
+    const nextSeq = data._flow_seq || 0;
+    const added = nextSeq - state.flowSeq;
+    if (added > 0 && data._flows) {
+      const newOnes = data._flows.slice(-Math.min(added, data._flows.length));
+      if (!state.pingFrozen) {
+        state.flows = newOnes;
+        if (state.ping.active) state.pingFrozen = true;
+      }
+    }
+    state.flowSeq = nextSeq;
+
+    prevStates = next;
+    emit();
+  }
+
+  // ── Initial /status fetch ────────────────────────────────────
+  function fetchInitialStatus() {
+    fetch('/status').then(r => r.json()).then(d => {
+      applyStatus(d);
+      state.online = true;
+      emit();
+    }).catch(() => {});
+  }
+
+  // ── Ping (EventSource /ping?src&dst) ─────────────────────────
+  let pingES = null;
+  function colorPingLine(line) {
+    if (!line || line.startsWith('PING ')) return { k: 'info', t: line };
+    if (line.includes('bytes from') && line.includes('time=')) {
+      const m = line.match(/time=([\d.]+)/);
+      const rtt = m ? parseFloat(m[1]) : 0;
+      return { k: rtt > 50 ? 'warn' : 'ok', t: line };
+    }
+    if (line.includes('timeout') || line.includes('nreachable')) return { k: 'fail', t: line };
+    if (line.includes('100% packet loss')) return { k: 'fail', t: line };
+    if (line.includes('packet loss') || line.startsWith('rtt ')) return { k: 'stat', t: line };
+    if (line.includes('statistics')) return { k: 'info', t: line };
+    return { k: 'info', t: line };
+  }
+
+  function bfsPath(src, dst) {
+    const auth = new Set();
+    for (let i = 1; i <= SWITCH_COUNT; i++) {
+      if ((state.switches[i] || {}).state === 'auth') auth.add(i);
+    }
+    if (!auth.has(src) || !auth.has(dst)) return [];
+    const adj = new Map();
+    state.edges.forEach(([a, b]) => {
+      if (!adj.has(a)) adj.set(a, []);
+      if (!adj.has(b)) adj.set(b, []);
+      adj.get(a).push(b); adj.get(b).push(a);
+    });
+    const visited = new Set([src]);
+    const queue = [[src, [src]]];
+    while (queue.length) {
+      const [n, path] = queue.shift();
+      if (n === dst) return path;
+      for (const nb of (adj.get(n) || [])) {
+        if (!visited.has(nb) && auth.has(nb)) { visited.add(nb); queue.push([nb, [...path, nb]]); }
+      }
+    }
+    return [];
+  }
+
+  function startPing(src, dst) {
+    stopPing();
+    state.ping = { active: false, src, dst, lines: [], error: null, path: null, seq: 0 };
+    state.flows = [];
+    state.pingFrozen = false;
+
+    // Zero Trust check
+    const ss = state.switches[src], ds = state.switches[dst];
+    const sOk = ss?.state === 'auth', dOk = ds?.state === 'auth';
+    if (!sOk || !dOk) {
+      let reason;
+      if (!sOk && !dOk) reason = `s${src} et s${dst} ne sont pas authentifiés`;
+      else if (!sOk) reason = `s${src} n'est pas authentifié`;
+      else reason = `s${dst} n'est pas authentifié`;
+      state.ping.error = `Communication impossible — ${reason}`;
+      emit();
+      return;
+    }
+
+    const path = bfsPath(src, dst);
+    state.ping.path = { forward: path, return: [...path].reverse(), src, dst, srcIP: `10.0.0.${src}`, dstIP: `10.0.0.${dst}` };
+    state.ping.active = true;
+    state.ping.lines.push({ k: 'info', t: `▶ ping s${src} → s${dst} (10.0.0.${dst}) continu` });
+    emit();
+
+    pingES = new EventSource(`/ping?src=${src}&dst=${dst}`);
+    pingES.onmessage = (e) => {
+      try {
+        const d = JSON.parse(e.data);
+        if (d.done) { stopPing(); return; }
+        if (d.line) {
+          state.ping.seq++;
+          state.ping.lines.push(colorPingLine(d.line));
+          if (state.ping.lines.length > 80) state.ping.lines.shift();
+          emit();
+        }
+      } catch (_) {}
+    };
+    pingES.onerror = () => {
+      state.ping.lines.push({ k: 'fail', t: 'Connexion au flux ping perdue.' });
+      stopPing();
+    };
+  }
+
+  function stopPing() {
     if (pingES) { pingES.close(); pingES = null; }
-    _resetPingButtons();
-    const row = document.createElement('div');
-    row.innerHTML = '<span class="p-fail">Connexion perdue.</span>';
-    term.appendChild(row);
+    if (state.ping.active) {
+      state.ping.active = false;
+      state.ping.lines.push({ k: 'info', t: '— ping arrêté —' });
+      emit();
+    } else {
+      emit();
+    }
+  }
+
+  function clearPing() {
+    stopPing();
+    state.ping.lines = [];
+    state.ping.path = null;
+    state.ping.error = null;
+    state.flows = [];
+    state.pingFrozen = false;
+    emit();
+  }
+
+  // ── Actions (POST endpoints) ─────────────────────────────────
+  async function postAction(url, label) {
+    try {
+      const r = await fetch(url, { method: 'POST' });
+      const d = await r.json();
+      return { ok: !!d.ok, msg: d.msg || `${label} OK` };
+    } catch (e) {
+      return { ok: false, msg: 'Connexion au serveur perdue' };
+    }
+  }
+  const quarantine = (id) => postAction(`/quarantine/${id}`, 'Quarantaine');
+  const restore    = (id) => postAction(`/restore/${id}`, 'Restauration');
+  const reauth     = (id) => postAction(`/reauth/${id}`, 'Re-auth');
+  const reauthAll  = ()   => postAction(`/reauth`, 'Re-auth global');
+
+  // ── Demo mode ────────────────────────────────────────────────
+  async function startDemo() {
+    try {
+      const r = await fetch('/demo/start', { method: 'POST' });
+      const d = await r.json();
+      if (d.ok) { state.demo.active = true; emit(); }
+      return d;
+    } catch (_) { return { ok: false }; }
+  }
+  async function stopDemo() {
+    try { await fetch('/demo/stop', { method: 'POST' }); } catch (_) {}
+    state.demo.active = false;
+    state.demo.scenario = '';
+    emit();
+  }
+  // Poll for current scenario label while demo is active
+  setInterval(async () => {
+    if (!state.demo.active) return;
+    try {
+      const d = await (await fetch('/demo')).json();
+      if (d.active) {
+        if (d.label !== state.demo.scenario) { state.demo.scenario = d.label || ''; emit(); }
+      } else {
+        state.demo.active = false; state.demo.scenario = ''; emit();
+      }
+    } catch (_) {}
+  }, 2000);
+
+  // ── Init ─────────────────────────────────────────────────────
+  fetchInitialStatus();
+  connectStream();
+  // Make sure any leftover demo state on server is stopped on first load
+  fetch('/demo/stop', { method: 'POST' }).catch(() => {});
+
+  window.ZLive = {
+    subscribe(fn) { subs.add(fn); fn(snapshot()); return () => subs.delete(fn); },
+    snapshot,
+    startPing, stopPing, clearPing,
+    quarantine, restore, reauth, reauthAll,
+    startDemo, stopDemo,
   };
-}
+})();
+</script>
 
-async function doReauth(id) {
-  try {
-    const r = await fetch(`/reauth/${id}`, { method: 'POST' });
-    const d = await r.json();
-    if (d.ok) {
-      addEvent('auth', `s${id} re-authentification lancée`);
-      toast(`s${id} — re-auth envoyée`);
-    } else {
-      toast(`Erreur : ${d.msg || 'commande échouée'}`);
-    }
-  } catch (e) {
-    toast('Connexion au serveur perdue');
-  }
-}
+<!-- ════════════════════════════════════════════════════════════════
+     React app — topology, panels, main shell
+════════════════════════════════════════════════════════════════ -->
+<script type="text/babel" data-presets="react">
+const { useState, useEffect, useMemo, useRef, useId } = React;
 
-async function doReauthAll() {
-  const btn = $('btn-reauth-all');
-  btn.disabled = true;
-  btn.textContent = '⏳ En cours…';
-  try {
-    const r = await fetch('/reauth', { method: 'POST' });
-    const d = await r.json();
-    if (d.ok) {
-      addEvent('auth', 'Re-authentification globale lancée (22 switches)');
-      toast('Re-auth globale lancée — ~11 secondes');
-    } else {
-      toast(`Erreur : ${d.msg || 'commande échouée'}`);
-    }
-  } catch (e) {
-    toast('Connexion au serveur perdue');
-  }
-  // Re-enable button after estimated duration (22 × 0.3s + margin)
-  setTimeout(() => {
-    btn.disabled = false;
-    btn.textContent = '🔐 Re-auth tout';
-  }, 12000);
-}
+// ── Theme ──────────────────────────────────────────────────────
+const T = {
+  bg: '#F2F2F7', surface: '#FFFFFF', surfaceMuted: '#F8F8FA', surfaceDark: '#1C1C1E',
+  border: '#E5E5EA', borderStrong: '#D1D1D6',
+  text: '#1C1C1E', textMuted: '#6B6B71', textFaint: '#9A9AA0',
+  accent: '#007AFF', accentSoft: '#E5F0FF',
+  auth: '#34C759', authSoft: '#E8F8EC',
+  pending: '#FF9F0A', pendingSoft: '#FFF4E0',
+  offline: '#AEAEB2', offlineSoft: '#EFEFF4',
+  danger: '#FF3B30', dangerSoft: '#FFE5E5',
+  shadow: '0 0 0 0.5px rgba(0,0,0,0.04), 0 1px 3px rgba(0,0,0,0.04), 0 4px 16px rgba(0,0,0,0.04)',
+  fontMono: '"SF Mono", "JetBrains Mono", ui-monospace, Menlo, monospace',
+};
 
-async function doRestore(id) {
-  try {
-    const r = await fetch(`/restore/${id}`, { method: 'POST' });
-    const d = await r.json();
-    if (d.ok) {
-      addEvent('restore', `s${id} restauré via dashboard`);
-      toast(`s${id} restauré — relancez l'auth DID`);
-    } else {
-      toast(`Erreur : ${d.msg || 'commande échouée'}`);
-    }
-  } catch (e) {
-    toast('Connexion au serveur perdue');
-  }
-}
+// ── Helpers ────────────────────────────────────────────────────
+const fmtDur = (s) => { s = Math.max(0, Math.floor(s)); return `${Math.floor(s/60)}m${String(s%60).padStart(2,'0')}s`; };
+const tokRem = (sw, now) => sw?.expiry ? Math.max(0, sw.expiry - now) : 0;
+const tokColor = (rem) => rem <= 0 || rem < 30 ? T.danger : (rem < 60 ? T.pending : T.auth);
 
-// ================================================================
-// Full update from SSE data
-// ================================================================
-function applyStatus(newStatus) {
-  detectChanges(newStatus);
+// ── Topology SVG ───────────────────────────────────────────────
+function NetworkTopology({ switches, edges, selectedId, onSelect, pingPath, width, height }) {
+  const uid = useId().replace(/[^a-z0-9]/gi, '');
 
-  // Detect new flows via the monotonic counter _flow_seq
-  const nextSeq   = newStatus._flow_seq || 0;
-  const added     = nextSeq - lastFlowSeq;
-  if (added > 0) {
-    const nextFlows = newStatus._flows || [];
-    const newOnes   = nextFlows.slice(-Math.min(added, nextFlows.length));
-
-    if (!pingFlowsFrozen) {
-      // Capturer le chemin une fois puis geler l'affichage
-      currentPingFlows = newOnes;
-      if (pingES) pingFlowsFrozen = true;  // active ping → freeze after this capture
-    }
-
-    // Highlight the full route for each unique IP pair
-    const ipPairs = new Set(newOnes.map(f => `${f.src}→${f.dst}`));
-    ipPairs.forEach(pair => {
-      const [src, dst] = pair.split('→');
-      highlightRoute(src, dst);
+  const bounds = useMemo(() => {
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    Object.values(POSITIONS).forEach(p => {
+      minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x);
+      minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y);
     });
+    return { minX, maxX, minY, maxY };
+  }, []);
 
-    if (activeTab !== 'flux') newFluxCount += added;
-  }
-  lastFlowSeq = nextSeq;
+  const pad = 50;
+  const rawW = bounds.maxX - bounds.minX;
+  const rawH = bounds.maxY - bounds.minY;
+  const scale = Math.min((width - pad*2) / rawW, (height - pad*2) / rawH);
+  const ox = pad - bounds.minX * scale + (width - pad*2 - rawW * scale) / 2;
+  const oy = pad - bounds.minY * scale + (height - pad*2 - rawH * scale) / 2;
+  const project = (p) => ({ x: p.x * scale + ox, y: p.y * scale + oy });
 
-  prevStatus = JSON.parse(JSON.stringify(status));
-  status = newStatus;
+  const pathEdges = useMemo(() => {
+    if (!pingPath) return new Set();
+    const s = new Set();
+    const add = (arr) => { for (let i = 0; i < arr.length - 1; i++) { const a = Math.min(arr[i], arr[i+1]); const b = Math.max(arr[i], arr[i+1]); s.add(`${a}-${b}`); } };
+    if (pingPath.forward) add(pingPath.forward);
+    if (pingPath.return) add(pingPath.return);
+    return s;
+  }, [pingPath]);
+  const pathNodes = useMemo(() => pingPath ? new Set([...(pingPath.forward||[]), ...(pingPath.return||[])]) : new Set(), [pingPath]);
 
-  updateStats(status);
-  updateNetwork(status);
-  renderSwitchList();
-  renderFluxList();
-  updateFluxBadge();
-  if (selectedId) renderDetail();
-}
-
-// ================================================================
-// Demo Mode
-// ================================================================
-let demoActive = false;
-
-function _applyDemoState(active, label) {
-  demoActive = active;
-  const btn = $('btn-demo');
-  const sc  = $('demo-scenario');
-  if (active) {
-    btn.classList.add('active');
-    btn.innerHTML = '<span class="demo-dot"></span> Démo active';
-    sc.style.display = 'inline';
-    sc.textContent   = label || '';
-  } else {
-    btn.classList.remove('active');
-    btn.innerHTML    = '▶ Mode Démo';
-    sc.style.display = 'none';
-    sc.textContent   = '';
-  }
-}
-
-async function toggleDemo() {
-  const endpoint = demoActive ? '/demo/stop' : '/demo/start';
-  try {
-    const r = await fetch(endpoint, { method: 'POST' });
-    const d = await r.json();
-    if (d.ok) {
-      _applyDemoState(!demoActive, '');
-      if (demoActive) switchTab('flux');  // switch to flux tab when demo starts
-    }
-  } catch (_) {
-    toast('Connexion au serveur perdue');
-  }
-}
-
-// Poll the current scenario every 2s while demo mode is active
-setInterval(async () => {
-  if (!demoActive) return;
-  try {
-    const r = await fetch('/demo');
-    const d = await r.json();
-    if (d.active) {
-      $('demo-scenario').textContent = d.label || '';
-    } else {
-      _applyDemoState(false, '');
-    }
-  } catch (_) {}
-}, 2000);
-
-// ================================================================
-// Clock
-// ================================================================
-function updateClock() {
-  $('clock').textContent = new Date().toLocaleString('fr-FR', {
-    dateStyle: 'short', timeStyle: 'medium'
-  });
-}
-setInterval(updateClock, 1000);
-updateClock();
-
-// Update token countdown and flow ages every second
-setInterval(() => {
-  if (Object.keys(status).length) {
-    renderSwitchList();
-    renderFluxList();
-    if (selectedId) renderDetail();
-  }
-}, 1000);
-
-// ================================================================
-// SSE connection
-// ================================================================
-function connectSSE() {
-  const es = new EventSource('/stream');
-
-  es.onmessage = e => {
-    try { applyStatus(JSON.parse(e.data)); }
-    catch (_) {}
+  const colorFor = (st) => {
+    if (st === 'auth') return { fill: '#fff', stroke: T.auth };
+    if (st === 'connected') return { fill: '#fff', stroke: T.pending };
+    return { fill: '#fff', stroke: T.offline };
   };
 
-  es.onerror = () => {
-    $('status-dot').style.background = 'var(--offline)';
-    es.close();
-    setTimeout(connectSSE, 3000);
-  };
+  const radius = Math.max(8, Math.min(13, width / 70));
+  const hubRadius = Math.max(12, Math.min(18, width / 50));
+
+  // Build path d-string for animated traveler
+  let travelD = '';
+  if (pingPath && pingPath.forward && pingPath.forward.length > 1) {
+    const pts = pingPath.forward.map(id => project(POSITIONS[id]));
+    travelD = pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x},${p.y}`).join(' ');
+  }
+
+  return (
+    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} style={{ display: 'block', overflow: 'visible' }}>
+      <defs>
+        <radialGradient id={`glow-${uid}`} cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stopColor={T.auth} stopOpacity="0.22" />
+          <stop offset="100%" stopColor={T.auth} stopOpacity="0" />
+        </radialGradient>
+      </defs>
+
+      {/* Edges */}
+      <g>{edges.map(([a, b], i) => {
+        if (!POSITIONS[a] || !POSITIONS[b]) return null;
+        const pa = project(POSITIONS[a]); const pb = project(POSITIONS[b]);
+        const key = `${Math.min(a,b)}-${Math.max(a,b)}`;
+        const onPath = pathEdges.has(key);
+        return <line key={i} x1={pa.x} y1={pa.y} x2={pb.x} y2={pb.y}
+          stroke={onPath ? T.accent : T.border} strokeWidth={onPath ? 2.25 : 1.25} strokeLinecap="round"
+          style={onPath ? { filter: `drop-shadow(0 0 4px ${T.accent}80)` } : undefined} />;
+      })}</g>
+
+      {/* Animated dot traveling along ping path */}
+      {travelD && (
+        <g>
+          <circle r="4" fill={T.accent} style={{ filter: `drop-shadow(0 0 6px ${T.accent})` }}>
+            <animateMotion dur="2.8s" repeatCount="indefinite" path={travelD} />
+          </circle>
+          <circle r="7" fill={T.accent} opacity="0.25">
+            <animateMotion dur="2.8s" repeatCount="indefinite" path={travelD} />
+          </circle>
+        </g>
+      )}
+
+      {/* Nodes */}
+      <g>{Object.keys(POSITIONS).map(idStr => {
+        const id = parseInt(idStr);
+        const p = project(POSITIONS[id]);
+        const sw = switches[id] || { state: 'unknown' };
+        const c = colorFor(sw.state);
+        const isHub = id === 1;
+        const isSel = selectedId === id;
+        const onPath = pathNodes.has(id);
+        const r = isHub ? hubRadius : radius;
+        return (
+          <g key={id} transform={`translate(${p.x},${p.y})`} style={{ cursor: 'pointer' }} onClick={() => onSelect && onSelect(id)}>
+            {sw.state === 'auth' && <circle r={r + 12} fill={`url(#glow-${uid})`} />}
+            {isSel && (
+              <circle r={r + 6} fill="none" stroke={T.accent} strokeWidth="1.5" strokeDasharray="3 3" opacity="0.8">
+                <animateTransform attributeName="transform" type="rotate" from="0" to="360" dur="12s" repeatCount="indefinite" />
+              </circle>
+            )}
+            {onPath && (
+              <circle r={r + 4} fill="none" stroke={T.accent} strokeWidth="1.5" opacity="0.7">
+                <animate attributeName="r" values={`${r+4};${r+12};${r+4}`} dur="1.6s" repeatCount="indefinite" />
+                <animate attributeName="opacity" values="0.7;0;0.7" dur="1.6s" repeatCount="indefinite" />
+              </circle>
+            )}
+            <circle r={r} fill={c.fill} stroke={c.stroke} strokeWidth={isHub ? 2 : 1.5} />
+            {isHub && <circle r={r * 0.4} fill={c.stroke} />}
+            <text y={r + 11} textAnchor="middle" fontSize={isHub ? 11 : 10} fontFamily={T.fontMono} fontWeight={isHub ? 600 : 500} fill={isHub ? T.text : T.textMuted}>s{id}</text>
+          </g>
+        );
+      })}</g>
+    </svg>
+  );
 }
 
-// ================================================================
-// Initialization
-// ================================================================
-initNetwork();
+// ── Topbar ─────────────────────────────────────────────────────
+function Topbar({ counts, online, now, demo, onToggleDemo, onReauthAll, reauthAllRunning }) {
+  const timeStr = new Date(now * 1000).toLocaleTimeString('fr-FR', { hour12: false });
+  const dateStr = new Date(now * 1000).toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' });
+  return (
+    <header className="z-topbar">
+      <div className="z-topbar-brand">
+        <div className="z-topbar-logo">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 2L3 7v6c0 5 4 9 9 10 5-1 9-5 9-10V7l-9-5z" />
+            <path d="M9 12l2 2 4-4" />
+          </svg>
+        </div>
+        <div>
+          <div className="z-topbar-name">Ztrust</div>
+          <div className="z-topbar-sub">SDN Zero Trust · Plan de données</div>
+        </div>
+      </div>
 
-// Load initial status immediately
-fetch('/status')
-  .then(r => r.json())
-  .then(applyStatus)
-  .catch(() => {});
+      <div className="z-pill" style={{ background: online ? T.authSoft : T.dangerSoft, color: online ? T.auth : T.danger, flexShrink: 0 }}>
+        <span style={{ width: 6, height: 6, borderRadius: 3, background: 'currentColor' }} className="z-pulse"></span>
+        <span className="z-status-text-long">{online ? 'Contrôleur actif' : 'Contrôleur hors ligne'}</span>
+      </div>
 
-// Stop any running demo on the server side when the page loads
-fetch('/demo/stop', { method: 'POST' }).catch(() => {});
+      {demo.active && (
+        <div className="z-pill z-fade-in" style={{ background: T.pendingSoft, color: T.pending, flexShrink: 0, minWidth: 0, overflow: 'hidden' }}>
+          <span className="z-demo-dot z-pulse"></span>
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Démo · {demo.scenario || 'en cours'}</span>
+        </div>
+      )}
 
-connectSSE();
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginLeft: 14, fontSize: 11, color: T.textMuted, flexShrink: 0 }} className="z-topbar-counts">
+        <span><b className="z-mono" style={{ color: T.auth, fontSize: 14, fontWeight: 700 }}>{counts.auth}</b> auth</span>
+        <span><b className="z-mono" style={{ color: T.pending, fontSize: 14, fontWeight: 700 }}>{counts.pending}</b> attente</span>
+        <span><b className="z-mono" style={{ color: T.offline, fontSize: 14, fontWeight: 700 }}>{counts.offline}</b> offline</span>
+      </div>
+
+      <div className="z-topbar-actions">
+        <span className="z-topbar-clock z-mono">{dateStr} · {timeStr}</span>
+        <button className="z-btn" onClick={onToggleDemo} style={demo.active ? { background: T.pending, color: '#fff' } : {}}>
+          {demo.active ? <><span className="z-demo-dot z-pulse" style={{ background: '#fff', display: 'inline-block', marginRight: 6 }}></span>Démo active</> : '▶ Mode démo'}
+        </button>
+        <button className="z-btn z-btn-primary" onClick={onReauthAll} disabled={reauthAllRunning}>
+          {reauthAllRunning ? 'En cours…' : <><span className="z-reauth-long">Re-auth global</span><span style={{ display: 'none' }} className="z-reauth-short">Re-auth</span></>}
+        </button>
+      </div>
+    </header>
+  );
+}
+
+// ── KPI strip ──────────────────────────────────────────────────
+function Kpis({ counts, ping }) {
+  const pct = counts.total ? counts.auth / counts.total : 0;
+  const r = 24, c = 2 * Math.PI * r, off = c * (1 - pct);
+  return (
+    <>
+      <div className="z-card" style={{ padding: 14, display: 'flex', alignItems: 'center', gap: 14 }}>
+        <div style={{ position: 'relative', width: 62, height: 62, flexShrink: 0 }}>
+          <svg width="62" height="62" style={{ transform: 'rotate(-90deg)' }}>
+            <circle cx="31" cy="31" r={r} fill="none" stroke={T.offlineSoft} strokeWidth="5" />
+            <circle cx="31" cy="31" r={r} fill="none" stroke={T.auth} strokeWidth="5" strokeLinecap="round" strokeDasharray={c} strokeDashoffset={off} style={{ transition: 'stroke-dashoffset 0.5s ease' }} />
+          </svg>
+          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: T.auth, fontFamily: T.fontMono }}>{Math.round(pct * 100)}%</div>
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 11, color: T.textMuted, fontWeight: 500 }}>Switches authentifiés</div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginTop: 2 }}>
+            <div className="z-mono" style={{ fontSize: 26, fontWeight: 700, letterSpacing: -0.03 }}>{counts.auth}</div>
+            <div style={{ fontSize: 13, color: T.textMuted, fontWeight: 500 }}>/ {counts.total}</div>
+          </div>
+          <div style={{ display: 'flex', gap: 10, marginTop: 3, fontSize: 11, color: T.textMuted }}>
+            <span><span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: 3, background: T.pending, marginRight: 4 }}></span>{counts.pending} attente</span>
+            <span><span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: 3, background: T.offline, marginRight: 4 }}></span>{counts.offline} offline</span>
+          </div>
+        </div>
+      </div>
+      <KpiTile label="En attente" value={counts.pending} sub="auth DID pending" color={T.pending} />
+      <KpiTile label="Hors ligne" value={counts.offline} sub="non joignables" color={T.offline} />
+      <KpiTile label={ping.active ? 'Ping en cours' : 'Réseau'} value={ping.active ? `${ping.seq}` : counts.auth} unit={ping.active ? 'pkts' : '✓'} sub={ping.active ? `s${ping.src} → s${ping.dst}` : 'OK'} color={ping.active ? T.accent : T.auth} />
+    </>
+  );
+}
+
+function KpiTile({ label, value, unit, sub, color }) {
+  return (
+    <div className="z-card" style={{ padding: 12, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: 4 }}>
+      <div style={{ fontSize: 11, color: T.textMuted, fontWeight: 500 }}>{label}</div>
+      <div>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
+          <div className="z-mono" style={{ fontSize: 22, fontWeight: 700, color, letterSpacing: -0.02, lineHeight: 1 }}>{value}</div>
+          {unit && <div style={{ fontSize: 11, color: T.textMuted }}>{unit}</div>}
+        </div>
+        <div style={{ fontSize: 10, color: T.textMuted, marginTop: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sub}</div>
+      </div>
+    </div>
+  );
+}
+
+// ── Topology card ──────────────────────────────────────────────
+function TopologyCard({ switches, edges, selectedId, onSelect, pingPath, pingActive }) {
+  const ref = useRef(null);
+  const [size, setSize] = useState({ w: 600, h: 380 });
+  useEffect(() => {
+    if (!ref.current) return;
+    const ro = new ResizeObserver(es => { for (const e of es) setSize({ w: Math.floor(e.contentRect.width), h: Math.floor(e.contentRect.height) }); });
+    ro.observe(ref.current);
+    return () => ro.disconnect();
+  }, []);
+
+  return (
+    <div className="z-card" style={{ flex: 1, padding: '14px 18px', display: 'flex', flexDirection: 'column', position: 'relative', minHeight: 0, overflow: 'hidden' }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 6, gap: 12, flexShrink: 0 }}>
+        <div>
+          <div style={{ fontSize: 14, fontWeight: 600, letterSpacing: -0.01 }}>Topologie réseau</div>
+          <div style={{ fontSize: 11, color: T.textMuted, marginTop: 1 }}>{SWITCH_COUNT} nœuds — cliquez pour inspecter</div>
+        </div>
+        <div style={{ display: 'flex', gap: 12, fontSize: 11, color: T.textMuted, flexShrink: 0 }}>
+          {[{ c: T.auth, l: 'Authentifié' }, { c: T.pending, l: 'Attente' }, { c: T.offline, l: 'Offline' }].map(x => (
+            <div key={x.l} style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 7, height: 7, borderRadius: 4, background: x.c }}></span>{x.l}</div>
+          ))}
+        </div>
+      </div>
+      <div ref={ref} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 0, position: 'relative' }}>
+        {size.w > 100 && size.h > 100 && (
+          <NetworkTopology switches={switches} edges={edges} selectedId={selectedId} onSelect={onSelect} pingPath={pingPath} width={size.w} height={size.h} />
+        )}
+        {pingActive && pingPath && (
+          <div className="z-fade-in" style={{ position: 'absolute', bottom: 8, left: 8, background: '#fff', border: `0.5px solid ${T.border}`, borderRadius: 12, padding: '8px 12px', boxShadow: T.shadow, display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ width: 7, height: 7, borderRadius: 4, background: T.accent }} className="z-pulse"></div>
+            <div className="z-mono" style={{ fontSize: 11, fontWeight: 600 }}>
+              <span style={{ color: T.auth }}>s{pingPath.src}</span>
+              <span style={{ color: T.textFaint, margin: '0 4px' }}>→</span>
+              <span style={{ color: T.accent }}>s{pingPath.dst}</span>
+              <span style={{ color: T.textFaint, marginLeft: 6, fontWeight: 400 }}>{pingPath.forward.length} hops</span>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Ping panel ─────────────────────────────────────────────────
+function PingPanel({ selectedId, switches, ping, open, onToggleOpen, onLaunch, onStop, onClear }) {
+  const [dst, setDst] = useState(11);
+  const termRef = useRef(null);
+
+  // Keep dst valid when selectedId changes
+  useEffect(() => { if (dst === selectedId) setDst(selectedId === 1 ? 2 : 1); }, [selectedId]);
+
+  useEffect(() => { if (termRef.current) termRef.current.scrollTop = termRef.current.scrollHeight; }, [ping.lines.length]);
+
+  const lineColor = (k) => ({ ok: '#34C759', warn: '#FF9F0A', fail: '#FF453A', stat: '#AF52DE', info: '#9A9AA0' })[k] || '#fff';
+  const hasOutput = ping.lines.length > 0 || ping.error;
+  const canLaunch = selectedId != null && !ping.active;
+
+  return (
+    <div className="z-card" style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <div style={{ padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 10, borderBottom: open && (hasOutput || ping.active) ? `0.5px solid ${T.border}` : 'none' }}>
+        <div style={{ width: 22, height: 22, borderRadius: 6, background: ping.active ? T.accent : T.surfaceMuted, color: ping.active ? '#fff' : T.textMuted, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M3 12h12M11 8l4 4-4 4M19 5v14"/></svg>
+        </div>
+        <div style={{ fontSize: 12, fontWeight: 600, flexShrink: 0 }}>Ping</div>
+        <div style={{ height: 16, width: 1, background: T.border }}></div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, flex: 1, minWidth: 0 }}>
+          <span style={{ color: T.textMuted }}>de</span>
+          <span className="z-mono" style={{ fontWeight: 600 }}>{selectedId ? `s${selectedId}` : '—'}</span>
+          <span style={{ color: T.textFaint }}>→</span>
+          <select value={dst} onChange={e => setDst(parseInt(e.target.value))} disabled={ping.active || !selectedId} className="z-mono"
+            style={{ background: T.surfaceMuted, border: 'none', borderRadius: 6, padding: '4px 8px', fontSize: 12, fontFamily: T.fontMono, color: T.text, outline: 'none', cursor: 'pointer' }}>
+            {Array.from({ length: SWITCH_COUNT }, (_, i) => i + 1).filter(i => i !== selectedId).map(i => (
+              <option key={i} value={i}>s{i} · 10.0.0.{i}</option>
+            ))}
+          </select>
+        </div>
+        {ping.active
+          ? <button className="z-btn z-btn-danger" onClick={onStop}>Arrêter</button>
+          : <button className="z-btn z-btn-primary" onClick={() => onLaunch(dst)} disabled={!canLaunch}>Lancer</button>
+        }
+        {hasOutput && !ping.active && <button className="z-btn z-btn-ghost" onClick={onClear}>Effacer</button>}
+        <button className="z-btn z-btn-ghost" onClick={onToggleOpen} style={{ padding: '4px 6px' }} title={open ? 'Masquer terminal' : 'Afficher terminal'}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .2s' }}><path d="M6 9l6 6 6-6"/></svg>
+        </button>
+      </div>
+      {open && (hasOutput || ping.active) && (
+        <div ref={termRef} className="z-mono z-fade-in" style={{ background: '#0E0E10', color: '#E5E5EA', padding: '10px 14px', fontSize: 11, lineHeight: 1.6, maxHeight: 160, overflowY: 'auto' }}>
+          {ping.error && <div style={{ color: T.danger }}>⛔ {ping.error}</div>}
+          {ping.lines.map((l, i) => (
+            <div key={i} style={{ color: lineColor(l.k), minHeight: '1.6em' }}>{l.t || ' '}</div>
+          ))}
+          {ping.active && <div style={{ color: T.textFaint, opacity: 0.6 }}><span className="z-pulse">▮</span></div>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Detail card ────────────────────────────────────────────────
+function DetailCard({ sw, now, onQuarantine, onRestore, onReauth }) {
+  if (!sw) return (
+    <div className="z-card" style={{ padding: 24, color: T.textFaint, fontSize: 12, textAlign: 'center', flexShrink: 0 }}>
+      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" opacity="0.5" style={{ marginBottom: 8 }}>
+        <circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/>
+      </svg>
+      <div>Sélectionnez un switch dans la topologie ou la liste pour voir son détail.</div>
+    </div>
+  );
+  const isAuth = sw.state === 'auth';
+  const isPending = sw.state === 'connected';
+  const rem = tokRem(sw, now);
+  const stateColor = isAuth ? T.auth : (isPending ? T.pending : T.offline);
+  const stateBg = isAuth ? T.authSoft : (isPending ? T.pendingSoft : T.offlineSoft);
+  const stateLbl = isAuth ? 'Authentifié' : (isPending ? 'En attente DID' : 'Hors ligne');
+  const expTime = sw.expiry ? new Date(sw.expiry * 1000).toLocaleTimeString('fr-FR', { hour12: false }) : null;
+  const idle = sw.last_seen ? Math.floor(now - sw.last_seen) : null;
+
+  return (
+    <div className="z-card" style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
+      <div style={{ padding: '14px 16px', background: stateBg, borderBottom: `0.5px solid ${T.border}` }}>
+        <div className="z-pill" style={{ background: stateColor, color: '#fff' }}>
+          <span style={{ width: 5, height: 5, borderRadius: 3, background: '#fff' }}></span>{stateLbl}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10, marginTop: 6 }}>
+          <div className="z-mono" style={{ fontSize: 28, fontWeight: 700, letterSpacing: -0.03 }}>s{sw.id}</div>
+          <div className="z-mono" style={{ fontSize: 12, color: T.textMuted }}>10.0.0.{sw.id}</div>
+        </div>
+        {isAuth && (
+          <div style={{ marginTop: 10 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: T.textMuted, marginBottom: 4 }}>
+              <span>Token DID</span>
+              {expTime && <span>expire à <span className="z-mono">{expTime}</span></span>}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+              <div className="z-mono" style={{ fontSize: 22, fontWeight: 700, color: tokColor(rem), letterSpacing: -0.02 }}>{fmtDur(rem)}</div>
+              {idle !== null && <div style={{ fontSize: 10, color: T.textMuted }}>· idle {idle}s</div>}
+            </div>
+            <div style={{ marginTop: 6, height: 4, background: 'rgba(0,0,0,0.06)', borderRadius: 2, overflow: 'hidden' }}>
+              <div style={{ height: '100%', width: `${Math.min(100, (rem / 900) * 100)}%`, background: tokColor(rem), borderRadius: 2, transition: 'width 1s linear' }}></div>
+            </div>
+          </div>
+        )}
+      </div>
+      <div style={{ padding: '4px 0', flex: 1, overflow: 'auto', minHeight: 0 }}>
+        {isAuth && sw.did && (
+          <div style={{ padding: '8px 16px', borderBottom: `0.5px solid ${T.surfaceMuted}` }}>
+            <div style={{ fontSize: 10, color: T.textMuted, marginBottom: 3 }}>DID</div>
+            <div className="z-mono" style={{ fontSize: 10, color: T.text, wordBreak: 'break-all', lineHeight: 1.45 }}>{sw.did}</div>
+          </div>
+        )}
+        {isPending && (
+          <div style={{ padding: '14px 16px', fontSize: 12, color: T.textMuted, lineHeight: 1.5 }}>
+            Switch connecté au contrôleur. En attente de la preuve cryptographique DID.
+          </div>
+        )}
+        {!isAuth && !isPending && (
+          <div style={{ padding: '14px 16px', fontSize: 12, color: T.textMuted, lineHeight: 1.5 }}>
+            Switch non joignable. Vérifier la liaison ou relancer l'authentification.
+          </div>
+        )}
+      </div>
+      <div style={{ padding: 12, borderTop: `0.5px solid ${T.border}`, display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
+        <button className="z-btn z-btn-danger" disabled={!isAuth} onClick={onQuarantine}>Quarantaine</button>
+        <button className="z-btn" disabled={isAuth} onClick={onRestore}>Restaurer</button>
+        <button className="z-btn z-btn-primary" disabled={sw.state === 'unknown'} onClick={onReauth}>Re-auth</button>
+      </div>
+    </div>
+  );
+}
+
+// ── Inventory (Switches | Flux) ────────────────────────────────
+function Inventory({ all, selectedId, onSelect, filter, onFilter, counts, activeTab, onTab, fluxItems, now }) {
+  const filtered = useMemo(() => {
+    return Object.values(all).filter(s => filter === 'all' || s.state === filter).sort((a, b) => a.id - b.id);
+  }, [all, filter]);
+  const filters = [
+    { k: 'all', label: 'Tous', n: counts.total },
+    { k: 'auth', label: 'Auth', n: counts.auth },
+    { k: 'connected', label: 'Attente', n: counts.pending },
+    { k: 'unknown', label: 'Offline', n: counts.offline },
+  ];
+
+  return (
+    <div className="z-card" style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+      <div style={{ display: 'flex', borderBottom: `0.5px solid ${T.border}`, flexShrink: 0 }}>
+        <button className={`z-tab-btn ${activeTab === 'switches' ? 'active' : ''}`} onClick={() => onTab('switches')}>
+          Switches <span className="z-tab-badge muted">{counts.total}</span>
+        </button>
+        <button className={`z-tab-btn ${activeTab === 'flux' ? 'active' : ''}`} onClick={() => onTab('flux')}>
+          Flux {fluxItems.length > 0 && <span className="z-tab-badge">{fluxItems.length}</span>}
+        </button>
+      </div>
+
+      {activeTab === 'switches' ? (
+        <>
+          <div style={{ display: 'flex', gap: 4, padding: '8px 10px', flexShrink: 0, borderBottom: `0.5px solid ${T.surfaceMuted}` }}>
+            {filters.map(f => (
+              <button key={f.k} className={`z-filter-chip ${filter === f.k ? 'on' : ''}`} onClick={() => onFilter(f.k)}>
+                {f.label} <span className="z-mono" style={{ marginLeft: 3, opacity: 0.7 }}>{f.n}</span>
+              </button>
+            ))}
+          </div>
+          <div style={{ flex: 1, overflow: 'auto', padding: '4px 0' }}>
+            {filtered.map(s => {
+              const sel = s.id === selectedId;
+              const rem = tokRem(s, now);
+              const color = s.state === 'auth' ? T.auth : (s.state === 'connected' ? T.pending : T.offline);
+              return (
+                <div key={s.id} className={`z-row-sw ${sel ? 'sel' : ''}`} onClick={() => onSelect(s.id)}>
+                  <span style={{ width: 7, height: 7, borderRadius: 4, background: color, flexShrink: 0, boxShadow: s.state === 'auth' ? `0 0 0 3px ${T.auth}1f` : 'none' }}></span>
+                  <span className="z-mono" style={{ fontWeight: 600, width: 28, flexShrink: 0 }}>s{s.id}</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 12 }}>{s.state === 'auth' ? 'Authentifié' : s.state === 'connected' ? 'En attente d\'auth DID' : 'Hors ligne'}</div>
+                    {s.did && (
+                      <div className="z-mono" style={{ fontSize: 10, color: T.textFaint, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.did.slice(0, 28)}…</div>
+                    )}
+                  </div>
+                  <span className="z-mono" style={{ fontSize: 11, color: s.state === 'auth' ? tokColor(rem) : T.textFaint, fontWeight: 500, flexShrink: 0 }}>{s.state === 'auth' ? fmtDur(rem) : '—'}</span>
+                </div>
+              );
+            })}
+            {filtered.length === 0 && <div style={{ padding: 24, textAlign: 'center', color: T.textFaint, fontSize: 12 }}>Aucun switch ne correspond au filtre.</div>}
+          </div>
+        </>
+      ) : (
+        <div style={{ flex: 1, overflow: 'auto', padding: '10px 12px' }}>
+          {fluxItems.length === 0 ? (
+            <div style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: T.textFaint, fontSize: 12, gap: 10, padding: 20, textAlign: 'center' }}>
+              <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" opacity="0.5"><path d="M3 12h12M11 8l4 4-4 4M19 5v14"/></svg>
+              <div>Lancez un ping pour visualiser les routes.</div>
+            </div>
+          ) : fluxItems.map((item, i) => (
+            <div key={i} className="z-fade-in" style={{ marginBottom: 10, padding: 10, borderRadius: 10, background: T.surfaceMuted, border: `0.5px solid ${T.border}` }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, gap: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                  <span className="z-pill" style={{ background: item.dir === 'Aller' ? T.accentSoft : T.authSoft, color: item.dir === 'Aller' ? T.accent : T.auth, flexShrink: 0 }}>{item.dir === 'Aller' ? '→' : '←'} {item.dir}</span>
+                  <span className="z-mono" style={{ fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    <span style={{ color: T.auth, fontWeight: 600 }}>{item.src}</span>
+                    <span style={{ color: T.textFaint, margin: '0 4px' }}>→</span>
+                    <span style={{ color: T.accent, fontWeight: 600 }}>{item.dst}</span>
+                  </span>
+                </div>
+                <span className="z-pill" style={{ background: T.surface, color: T.textMuted, flexShrink: 0 }}>{item.hops} hops</span>
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 4 }}>
+                {item.path.map((dpid, idx) => (
+                  <React.Fragment key={idx}>
+                    <span className="z-mono" style={{ background: T.surface, border: `0.5px solid ${T.borderStrong}`, color: T.accent, borderRadius: 6, padding: '3px 8px', fontSize: 11, fontWeight: 600 }}>s{dpid}</span>
+                    {idx < item.path.length - 1 && <span style={{ color: T.textFaint, fontSize: 10 }}>▸</span>}
+                  </React.Fragment>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Events drawer ──────────────────────────────────────────────
+function EventsDrawer({ events, open, unread, onToggle }) {
+  const typeColor = (t) => ({ auth: T.auth, restore: T.accent, quar: T.danger, expire: T.pending, inactive: T.offline })[t] || T.textMuted;
+  const typeLbl = (t) => ({ auth: 'Auth', restore: 'Restore', quar: 'Quarantaine', expire: 'Expire', inactive: 'Inactif' })[t] || t;
+  const fmtAgo = (a) => a < 60 ? `${a}s` : a < 3600 ? `${Math.floor(a/60)}m${String(a%60).padStart(2,'0')}s` : `${Math.floor(a/3600)}h`;
+
+  return (
+    <div style={{ flexShrink: 0, borderTop: `0.5px solid ${T.border}`, background: '#FAFAFC', maxHeight: open ? 220 : 38, transition: 'max-height .25s ease', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ padding: '8px 18px', display: 'flex', alignItems: 'center', cursor: 'pointer', flexShrink: 0 }} onClick={onToggle}>
+        <span className="z-h">Journal d'événements</span>
+        {!open && unread > 0 && <span className="z-pill" style={{ background: T.danger, color: '#fff', marginLeft: 10 }}>{unread} nouveaux</span>}
+        <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: T.textMuted }}>
+          {events.length} événements
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .2s' }}><path d="M6 9l6 6 6-6"/></svg>
+        </span>
+      </div>
+      {open && (
+        <div style={{ flex: 1, overflow: 'auto', padding: '4px 18px 12px' }}>
+          {events.slice(0, 50).map((e, i) => (
+            <div key={i} style={{ padding: '7px 0', display: 'flex', gap: 12, alignItems: 'center', borderBottom: i < Math.min(49, events.length - 1) ? `0.5px solid ${T.surfaceMuted}` : 'none' }}>
+              <span className="z-mono" style={{ fontSize: 10, color: T.textFaint, width: 70, flexShrink: 0 }}>il y a {fmtAgo(e.age || 0)}</span>
+              <span className="z-pill" style={{ background: typeColor(e.type) + '22', color: typeColor(e.type), flexShrink: 0, minWidth: 80, justifyContent: 'center' }}>{typeLbl(e.type)}</span>
+              <span style={{ fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.text}</span>
+            </div>
+          ))}
+          {events.length === 0 && <div style={{ padding: 16, textAlign: 'center', color: T.textFaint, fontSize: 12 }}>Aucun événement.</div>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Toast ──────────────────────────────────────────────────────
+function Toast({ msg }) {
+  return (
+    <div style={{ position: 'fixed', bottom: 20, right: 20, zIndex: 100, background: '#1C1C1E', color: '#fff', padding: '10px 16px', borderRadius: 12, fontSize: 13, fontWeight: 500, boxShadow: '0 4px 20px rgba(0,0,0,0.18), 0 0 0 0.5px rgba(255,255,255,0.08)', opacity: msg ? 1 : 0, transform: msg ? 'translateY(0)' : 'translateY(8px)', transition: 'opacity .2s, transform .2s', pointerEvents: 'none' }}>
+      {msg || ''}
+    </div>
+  );
+}
+
+// ── Main App ───────────────────────────────────────────────────
+function App() {
+  const [snap, setSnap] = useState(window.ZLive.snapshot());
+  const [selectedId, setSelectedId] = useState(null);
+  const [activeTab, setActiveTab] = useState('switches');
+  const [filter, setFilter] = useState('all');
+  const [eventsOpen, setEventsOpen] = useState(false);
+  const [unreadEvents, setUnreadEvents] = useState(0);
+  const [toast, setToast] = useState(null);
+  const [now, setNow] = useState(Date.now() / 1000);
+  const [terminalOpen, setTerminalOpen] = useState(false);
+  const [reauthAllRunning, setReauthAllRunning] = useState(false);
+
+  // Auto-select first auth switch on first data
+  useEffect(() => {
+    if (selectedId !== null) return;
+    const firstAuth = Object.values(snap.switches).find(s => s.state === 'auth');
+    if (firstAuth) setSelectedId(firstAuth.id);
+    else if (Object.keys(snap.switches).length > 0) setSelectedId(parseInt(Object.keys(snap.switches)[0]));
+  }, [snap.switches, selectedId]);
+
+  // Subscribe (use ref to avoid stale closure)
+  const stateRef = useRef({ activeTab, eventsOpen, lastEvCount: snap.events.length, lastPingActive: false });
+  stateRef.current.activeTab = activeTab;
+  stateRef.current.eventsOpen = eventsOpen;
+  useEffect(() => {
+    return window.ZLive.subscribe((s) => {
+      setSnap(s);
+      if (s.ping.active && stateRef.current.activeTab !== 'flux') setActiveTab('flux');
+      if (s.ping.active && !stateRef.current.lastPingActive) setTerminalOpen(true);
+      stateRef.current.lastPingActive = s.ping.active;
+      if (s.events.length > stateRef.current.lastEvCount && !stateRef.current.eventsOpen) {
+        setUnreadEvents(u => u + (s.events.length - stateRef.current.lastEvCount));
+      }
+      stateRef.current.lastEvCount = s.events.length;
+    });
+  }, []);
+
+  // Tick now every second
+  useEffect(() => { const id = setInterval(() => setNow(Date.now() / 1000), 1000); return () => clearInterval(id); }, []);
+
+  // Toast auto-dismiss
+  useEffect(() => { if (!toast) return; const id = setTimeout(() => setToast(null), 2800); return () => clearTimeout(id); }, [toast]);
+
+  const { switches, edges, events, ping, demo, counts, online, flows } = snap;
+  const selected = selectedId ? switches[selectedId] : null;
+
+  // Build flux items from current ping path (Aller / Retour)
+  const fluxItems = useMemo(() => {
+    if (!ping.path) return [];
+    const items = [];
+    if (ping.path.forward && ping.path.forward.length > 1)
+      items.push({ dir: 'Aller', src: ping.path.srcIP, dst: ping.path.dstIP, hops: ping.path.forward.length, path: ping.path.forward });
+    if (ping.path.return && ping.path.return.length > 1)
+      items.push({ dir: 'Retour', src: ping.path.dstIP, dst: ping.path.srcIP, hops: ping.path.return.length, path: ping.path.return });
+    return items;
+  }, [ping.path]);
+
+  const action = async (promise, label) => {
+    const r = await promise;
+    setToast(r.ok ? (label || r.msg) : `Erreur : ${r.msg}`);
+  };
+
+  const onReauthAll = async () => {
+    setReauthAllRunning(true);
+    const r = await window.ZLive.reauthAll();
+    setToast(r.ok ? 'Re-auth globale lancée' : `Erreur : ${r.msg}`);
+    // Server typically takes ~11s (22 × 0.3s + margin)
+    setTimeout(() => setReauthAllRunning(false), 12000);
+  };
+
+  const onToggleDemo = async () => {
+    if (demo.active) { await window.ZLive.stopDemo(); setToast('Mode démo arrêté'); }
+    else { const r = await window.ZLive.startDemo(); setToast(r.ok ? 'Mode démo activé' : 'Démo indisponible'); }
+  };
+
+  const toggleEvents = () => setEventsOpen(o => { if (!o) setUnreadEvents(0); return !o; });
+
+  return (
+    <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: T.bg, fontSize: 13, letterSpacing: -0.005 }}>
+      <Topbar counts={counts} online={online} now={now} demo={demo} onToggleDemo={onToggleDemo} onReauthAll={onReauthAll} reauthAllRunning={reauthAllRunning} />
+
+      <div className="z-main">
+        <div className="z-col-left">
+          <div className="z-kpis"><Kpis counts={counts} ping={ping} /></div>
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, gap: 10 }}>
+            <TopologyCard switches={switches} edges={edges} selectedId={selectedId} onSelect={setSelectedId} pingPath={ping.path} pingActive={ping.active} />
+            <PingPanel
+              selectedId={selectedId} switches={switches} ping={ping}
+              open={terminalOpen} onToggleOpen={() => setTerminalOpen(v => !v)}
+              onLaunch={(dst) => { if (selectedId) { window.ZLive.startPing(selectedId, dst); setActiveTab('flux'); } }}
+              onStop={() => window.ZLive.stopPing()}
+              onClear={() => window.ZLive.clearPing()}
+            />
+          </div>
+        </div>
+
+        <div className="z-col-right">
+          <DetailCard sw={selected} now={now}
+            onQuarantine={() => action(window.ZLive.quarantine(selected.id), `s${selected.id} mis en quarantaine`)}
+            onRestore={() => action(window.ZLive.restore(selected.id), `s${selected.id} restauré`)}
+            onReauth={() => action(window.ZLive.reauth(selected.id), `s${selected.id} — re-auth envoyée`)}
+          />
+          <Inventory all={switches} selectedId={selectedId} onSelect={setSelectedId}
+            filter={filter} onFilter={setFilter} counts={counts}
+            activeTab={activeTab} onTab={setActiveTab} fluxItems={fluxItems} now={now} />
+        </div>
+      </div>
+
+      <EventsDrawer events={events} open={eventsOpen} unread={unreadEvents} onToggle={toggleEvents} />
+
+      <Toast msg={toast} />
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
 </script>
 </body>
 </html>
